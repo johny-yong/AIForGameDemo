@@ -2,6 +2,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+//AI Logic
+//Uses Waypoint for idling (Need ownself set the position of the waypoints per AI)
+//Uses A* for shortest distance to move between way points as well as the player chasing
+//Currently when the player is touched, get back to previous (next) waypoint
+
 public class WaypointEnemyAI : MonoBehaviour
 {
     [Header("Patrol Settings")]

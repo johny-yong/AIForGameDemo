@@ -11,9 +11,10 @@ public class GridAStar : MonoBehaviour
 
     private void Awake()
     {
-        Instance = this;
+        Instance = this; //For singleton calculation
     }
 
+    //AStar logic is implemented here
     public List<Vector3> FindPath(Vector3 startWorld, Vector3 targetWorld)
     {
         Vector3Int startCell = tilemap.WorldToCell(startWorld);
@@ -25,6 +26,7 @@ public class GridAStar : MonoBehaviour
         if (!startNode.walkable || !endNode.walkable)
             return null;
 
+        //Open list and closed list
         var openList = new List<GridNode>();
         var closedSet = new HashSet<Vector3Int>();
 
@@ -61,11 +63,12 @@ public class GridAStar : MonoBehaviour
             }
         }
 
-        return null; // No path found
+        return null;
     }
 
     GridNode CreateNode(Vector3Int cellPos)
     {
+        //Node created in reference to tilemap
         Vector3 world = tilemap.GetCellCenterWorld(cellPos);
         bool walkable = !wallCollider.OverlapPoint(world);
         return new GridNode(cellPos, world, walkable);
@@ -88,6 +91,7 @@ public class GridAStar : MonoBehaviour
         return neighbors;
     }
 
+    //Check back logic that was followed in A*
     List<Vector3> RetracePath(GridNode start, GridNode end)
     {
         List<Vector3> path = new List<Vector3>();

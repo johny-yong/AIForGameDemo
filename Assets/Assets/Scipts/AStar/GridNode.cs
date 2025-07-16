@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+//Data per grid
 public class GridNode
 {
     public Vector3Int cellPos;    
