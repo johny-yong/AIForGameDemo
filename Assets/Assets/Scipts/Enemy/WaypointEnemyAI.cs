@@ -34,9 +34,15 @@ public class WaypointEnemyAI : MonoBehaviour
 
     public ViewConeRenderer viewCone;
 
+    private Blackboard blackboard;
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
+        //Automatically adding the blackboard
+        blackboard = GetComponent<Blackboard>();
+        if (blackboard == null) { 
+            blackboard = gameObject.AddComponent<Blackboard>();
+        }
     }
 
     void Update()
