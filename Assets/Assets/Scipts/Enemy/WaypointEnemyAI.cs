@@ -7,6 +7,9 @@ using UnityEngine;
 //Uses A* for shortest distance to move between way points as well as the player chasing
 //Currently when the player is touched, get back to previous (next) waypoint
 
+
+//Maybe need to add a persistancy logic behind the enemy AI?
+//To do: Try carry some data from project 3 into here...
 public class WaypointEnemyAI : MonoBehaviour
 {
     [Header("Patrol Settings")]
