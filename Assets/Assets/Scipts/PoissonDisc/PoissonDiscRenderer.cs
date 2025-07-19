@@ -36,7 +36,7 @@ public class PoissonDiscRenderer : MonoBehaviour
     void Update()
     {
         WaypointEnemyAI enemy = GetComponentInParent<WaypointEnemyAI>();
-        if (enemy == null || enemy.awarenessMode != WaypointEnemyAI.AwarenessMode.PoissonDisc)
+        if (enemy == null || enemy.enemyData.currentAwareness != GeneralEnemyData.AwarenessMode.PoissonDisc)
         {
             HideAllDots();
             return;

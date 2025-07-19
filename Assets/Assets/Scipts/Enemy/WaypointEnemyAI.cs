@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static GeneralEnemyData;
 
 //AI Logic
 //Uses Waypoint for idling (Need ownself set the position of the waypoints per AI)
@@ -10,6 +11,9 @@ using UnityEngine;
 
 //Maybe need to add a persistancy logic behind the enemy AI?
 //To do: Try carry some data from project 3 into here...
+
+//Currently while blackboard is implemented into the system already, but the usage not there yet
+//To be updated later on
 public class WaypointEnemyAI : MonoBehaviour
 {
     [Header("Patrol Settings")]
@@ -45,17 +49,17 @@ public class WaypointEnemyAI : MonoBehaviour
     public float backViewDistance = 5f;
     public float backViewAngle = 180f;
 
-    public enum AwarenessMode
-    {
-        OmniScient,
-        ViewCone,
-        PoissonDisc
-    }
+    public GeneralEnemyData enemyData;
 
-    [Header("Awareness")]
-    public AwarenessMode awarenessMode = AwarenessMode.ViewCone;
+    //The actual one
+    [Range(0f, 1f)] 
+    public float confidenceThreshold = 0.3f;
 
     private Blackboard blackboard;
+
+    public GameObject pathOrbPrefab;
+    private List<GameObject> pathOrbs = new List<GameObject>();
+
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
@@ -64,15 +68,16 @@ public class WaypointEnemyAI : MonoBehaviour
         if (blackboard == null) { 
             blackboard = gameObject.AddComponent<Blackboard>();
         }
-    }
+        enemyData = GameObject.FindGameObjectWithTag("EnemyDataController").GetComponent<GeneralEnemyData>();
+}
 
-    void Update()
+void Update()
     {
         if (!player) return;
-        viewCone.isVisible = (awarenessMode == AwarenessMode.ViewCone);
+        viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        switch (awarenessMode)
+        switch (enemyData.currentAwareness)
         {
             case AwarenessMode.OmniScient:
                 chasingPlayer = true;
@@ -94,14 +99,25 @@ public class WaypointEnemyAI : MonoBehaviour
             if (repathTimer >= repathInterval)
             {
                 path = GridAStar.Instance.FindPath(transform.position, player.position);
-                GridAStar.Instance.HighlightPath(path);
+                ClearPathOrbs();
+                if (enemyData.showDottedPath)
+                {
+                    foreach (Vector3 pos in path)
+                    {
+                        GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
+                        orb.transform.localScale = new Vector3(orb.transform.localScale.x * 3f, orb.transform.localScale.y * 3f, orb.transform.localScale.z * 3f);
+                        orb.GetComponent<SpriteRenderer>().color = Color.black;
+                        pathOrbs.Add(orb);
+                    }
+                }
+
                 pathIndex = 0;
                 repathTimer = 0f;
 
                 if (path == null)
                 {
                     Debug.LogWarning("No path found to player!");
-                    GridAStar.Instance.ResetHighlightedToWhite();
+                    ClearPathOrbs();         
                 }
                 else
                 {
@@ -114,7 +130,7 @@ public class WaypointEnemyAI : MonoBehaviour
             if (!CheckPlayerInPoissonDisc() && (pathIndex >= path.Count))
             {
                 chasingPlayer = false;
-                GridAStar.Instance.ResetHighlightedToWhite();
+                ClearPathOrbs();
                 path = null;
             }
 
@@ -147,9 +163,9 @@ public class WaypointEnemyAI : MonoBehaviour
         if (path != null && path.Count > 0 && Vector3.Distance(transform.position, path[path.Count - 1]) <= reachDistance)
         {
             Debug.Log("Reached waypoint " + currentWaypointIndex);
-            GridAStar.Instance.ResetHighlightedToWhite();
             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
             path = null;
+            ClearPathOrbs();
         }
     }
 
@@ -212,27 +228,27 @@ public class WaypointEnemyAI : MonoBehaviour
 
         int currentSampleCount = suspicious || chasingPlayer ? alertSampleCount : normalSampleCount;
 
-        // === FRONT CONE ===
+        //Front cone
         var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
-        if (CheckSamplesForPlayer(frontSamples, 1.0f, 1.0f))
+        if (CheckSamplesForPlayer(frontSamples, 1.0f))
             return true;
 
-        // === BACK CONE ===
+        //Back cone
         int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
 
         var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
-        if (CheckSamplesForPlayer(backSamples, 0.5f, 0.5f)) // max confidence from back
+        if (CheckSamplesForPlayer(backSamples, 0.5f))
             return true;
 
         return false;
     }
 
-    bool CheckSamplesForPlayer(List<PoissonDiscSampler.Sample> samples, float maxConfidence, float confidenceThreshold)
+    bool CheckSamplesForPlayer(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
     {
         foreach (var s in samples)
         {
             float confidence = Mathf.Min(s.confidence, maxConfidence);
-            //if (confidence < confidenceThreshold) continue;
+            if (confidence < confidenceThreshold) continue;
 
             Vector3 worldSample = transform.position + s.direction * s.radius;
             RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | playerMask);
@@ -246,6 +262,14 @@ public class WaypointEnemyAI : MonoBehaviour
         return false;
     }
 
+    void ClearPathOrbs()
+    {
+        foreach (var orb in pathOrbs)
+        {
+            if (orb) Destroy(orb);
+        }
+        pathOrbs.Clear();
+    }
 
     private void OnDrawGizmosSelected()
     {

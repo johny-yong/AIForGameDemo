@@ -22,6 +22,8 @@ public class PlayerController : MonoBehaviour
         movement.x = Input.GetAxisRaw("Horizontal");
         movement.y = Input.GetAxisRaw("Vertical");
         movement = movement.normalized; 
+
+
     }
 
     //When using rigidbody, using FixedUpdate is better

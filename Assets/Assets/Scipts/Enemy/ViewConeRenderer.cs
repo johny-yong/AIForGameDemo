@@ -3,12 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using static WaypointEnemyAI;
 
-//Poisson Disc implementation to be visualised here as well
-/* 
-Do not use the percentages as the game is seeing the object or not, use the percentages to see if the game ai identifies the object as a friendly ally or not.
-Some threshold could be taken such that those below under the certain percentage get ignored completely.
- */
-
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class ViewConeRenderer : MonoBehaviour
 {
