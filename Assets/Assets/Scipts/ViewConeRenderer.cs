@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static WaypointEnemyAI;
 
 //Poisson Disc implementation to be visualised here as well
 /* 

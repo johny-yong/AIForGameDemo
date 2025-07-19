@@ -6,6 +6,9 @@ public class GridAStar : MonoBehaviour
 {
     public Tilemap tilemap;
     public TilemapCollider2D wallCollider;
+    public Tilemap pathHighlightTilemap; //Using floor
+
+    private List<Vector3Int> lastHighlightedCells = new List<Vector3Int>();
 
     public static GridAStar Instance;
 
@@ -106,4 +109,32 @@ public class GridAStar : MonoBehaviour
         path.Reverse();
         return path;
     }
+    //For visualisation
+    public void HighlightPath(List<Vector3> path)
+    {
+        if (pathHighlightTilemap == null || path == null) { Debug.Log("No path to highlight"); return; }
+
+        ResetHighlightedToWhite(); //Clear previous highlights before setting new ones
+
+        lastHighlightedCells.Clear();
+
+        foreach (Vector3 worldPos in path)
+        {
+            Vector3Int cell = tilemap.WorldToCell(worldPos);
+            pathHighlightTilemap.SetTileFlags(cell, TileFlags.None); //Allow color
+            pathHighlightTilemap.SetColor(cell, Color.yellow);
+            lastHighlightedCells.Add(cell); // Track it
+            Debug.Log($"Highlighting: {cell}");
+        }
+    }
+
+    public void ResetHighlightedToWhite()
+    {
+        foreach (var cell in lastHighlightedCells)
+        {
+            pathHighlightTilemap.SetColor(cell, Color.white);
+        }
+        lastHighlightedCells.Clear();
+    }
+
 }

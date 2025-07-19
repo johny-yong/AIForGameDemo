@@ -31,8 +31,26 @@ public class WaypointEnemyAI : MonoBehaviour
     public float viewDistance = 5f;
     public int rayCount = 30;
     public LayerMask obstacleMask;
+    public LayerMask playerMask;
 
     public ViewConeRenderer viewCone;
+
+    [Header("Poisson Sampling")]
+    public int normalSampleCount = 50;
+    public int alertSampleCount = 150;
+    private bool suspicious = false; // Could be set based on hearing or other cues
+    public float backViewDistance = 5f;
+    public float backViewAngle = 180f;
+
+    public enum AwarenessMode
+    {
+        OmniScient,
+        ViewCone,
+        PoissonDisc
+    }
+
+    [Header("Awareness")]
+    public AwarenessMode awarenessMode = AwarenessMode.ViewCone;
 
     private void Start()
     {
@@ -42,12 +60,23 @@ public class WaypointEnemyAI : MonoBehaviour
     void Update()
     {
         if (!player) return;
-
-        viewCone.isVisible = true;
-
+        viewCone.isVisible = (awarenessMode == AwarenessMode.ViewCone);
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        chasingPlayer = viewCone.playerInSight;
+        switch (awarenessMode)
+        {
+            case AwarenessMode.OmniScient:
+                chasingPlayer = true;
+                break;
+
+            case AwarenessMode.ViewCone:
+                chasingPlayer = viewCone.playerInSight;
+                break;
+
+            case AwarenessMode.PoissonDisc:
+                chasingPlayer = CheckPlayerInPoissonDisc();
+                break;
+        }
 
         if (chasingPlayer)
         {
@@ -56,16 +85,30 @@ public class WaypointEnemyAI : MonoBehaviour
             if (repathTimer >= repathInterval)
             {
                 path = GridAStar.Instance.FindPath(transform.position, player.position);
+                GridAStar.Instance.HighlightPath(path);
                 pathIndex = 0;
                 repathTimer = 0f;
 
                 if (path == null)
+                {
                     Debug.LogWarning("No path found to player!");
+                    GridAStar.Instance.ResetHighlightedToWhite();
+                }
                 else
+                {
                     Debug.Log("Path found with " + path.Count + " steps.");
+                }
+
             }
 
             FollowPath();
+            if (!CheckPlayerInPoissonDisc() && (pathIndex >= path.Count))
+            {
+                chasingPlayer = false;
+                GridAStar.Instance.ResetHighlightedToWhite();
+                path = null;
+            }
+
         }
         else
         {
@@ -78,6 +121,7 @@ public class WaypointEnemyAI : MonoBehaviour
         if (waypoints.Length == 0) return;
 
         Transform target = waypoints[currentWaypointIndex];
+        //GridAStar.Instance.ResetHighlightedToWhite();
 
         // If path is null, empty, or we’ve reached the end, recalculate
         if (path == null || path.Count == 0 || pathIndex >= path.Count)
@@ -94,6 +138,7 @@ public class WaypointEnemyAI : MonoBehaviour
         if (path != null && path.Count > 0 && Vector3.Distance(transform.position, path[path.Count - 1]) <= reachDistance)
         {
             Debug.Log("Reached waypoint " + currentWaypointIndex);
+            GridAStar.Instance.ResetHighlightedToWhite();
             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
             path = null;
         }
@@ -152,7 +197,45 @@ public class WaypointEnemyAI : MonoBehaviour
 
         transform.position = current + direction * moveSpeed * Time.deltaTime;
     }
+    bool CheckPlayerInPoissonDisc()
+    {
+        if (!player) return false;
 
+        int currentSampleCount = suspicious || chasingPlayer ? alertSampleCount : normalSampleCount;
+
+        // === FRONT CONE ===
+        var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
+        if (CheckSamplesForPlayer(frontSamples, 1.0f, 1.0f))
+            return true;
+
+        // === BACK CONE ===
+        int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
+
+        var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
+        if (CheckSamplesForPlayer(backSamples, 0.5f, 0.5f)) // max confidence from back
+            return true;
+
+        return false;
+    }
+
+    bool CheckSamplesForPlayer(List<PoissonDiscSampler.Sample> samples, float maxConfidence, float confidenceThreshold)
+    {
+        foreach (var s in samples)
+        {
+            float confidence = Mathf.Min(s.confidence, maxConfidence);
+            //if (confidence < confidenceThreshold) continue;
+
+            Vector3 worldSample = transform.position + s.direction * s.radius;
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | playerMask);
+
+            if (hit.collider != null && hit.transform == player)
+            {
+                Debug.Log($"Player hit at confidence {confidence}");
+                return true;
+            }
+        }
+        return false;
+    }
 
 
     private void OnDrawGizmosSelected()
