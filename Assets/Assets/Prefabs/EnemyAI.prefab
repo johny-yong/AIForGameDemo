@@ -253,6 +253,7 @@ MonoBehaviour:
   hiddenColor: {r: 1, g: 1, b: 0, a: 0}
   alertColor: {r: 1, g: 0, b: 0, a: 0.7}
   isVisible: 1
+  blackboard: {fileID: 4959832513265409679}
 --- !u!1 &7476947943165543366
 GameObject:
   m_ObjectHideFlags: 0
@@ -361,6 +362,7 @@ MonoBehaviour:
   hiddenColor: {r: 1, g: 1, b: 0, a: 0}
   alertColor: {r: 1, g: 0, b: 0, a: 0.7}
   isVisible: 1
+  blackboard: {fileID: 4959832513265409679}
 --- !u!1 &8913449033229496997
 GameObject:
   m_ObjectHideFlags: 0
@@ -373,6 +375,7 @@ GameObject:
   - component: {fileID: 6178549935341070886}
   - component: {fileID: 6644435476855192171}
   - component: {fileID: 1841268694706130159}
+  - component: {fileID: 4959832513265409679}
   m_Layer: 0
   m_Name: EnemyAI
   m_TagString: Untagged
@@ -524,3 +527,15 @@ CircleCollider2D:
   m_Offset: {x: 0, y: 0}
   serializedVersion: 2
   m_Radius: 0.8
+--- !u!114 &4959832513265409679
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8913449033229496997}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63a0b31f76cad6441ad412aaa37b0773, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

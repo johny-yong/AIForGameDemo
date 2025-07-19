@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -29,6 +30,7 @@ public class CircularVisionRenderer : MonoBehaviour
     public bool isVisible = true;
     public bool playerInSight { get; private set; } = false;
 
+    public Blackboard blackboard;
     void Awake()
     {
         mesh = new Mesh();
@@ -42,9 +44,11 @@ public class CircularVisionRenderer : MonoBehaviour
         dynamicMaterial.color = currentColor;
 
         target = GameObject.FindGameObjectWithTag("Player").transform;
+        blackboard = GetComponentInParent<Blackboard>();
+
     }
 
-    void LateUpdate()
+    void Update()
     {
         GenerateCircle();
         UpdateFade();
@@ -89,6 +93,14 @@ public class CircularVisionRenderer : MonoBehaviour
                     }
                 }
             }
+        }
+        if (playerInSight && blackboard != null)
+        {
+            blackboard.Set("circlePlayerSeen", true);
+        }
+        else if (blackboard != null)
+        {
+            blackboard.Set("circlePlayerSeen", false);
         }
 
         //Drawing the circle

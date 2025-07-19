@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using static WaypointEnemyAI;
 
@@ -31,7 +32,7 @@ public class ViewConeRenderer : MonoBehaviour
 
     public bool isVisible = true;
     public bool playerInSight { get; private set; } = false;
-
+    public Blackboard blackboard;      
     void Awake()
     {
         mesh = new Mesh();
@@ -45,9 +46,11 @@ public class ViewConeRenderer : MonoBehaviour
 
         target = GameObject.FindGameObjectWithTag("Player").transform;
         viewDistance = gameObject.GetComponentInParent<WaypointEnemyAI>().viewDistance;
+        blackboard = GetComponentInParent<Blackboard>();
+
     }
 
-    void LateUpdate()
+    void Update()
     {
         GenerateCone();
         UpdateFade();
@@ -55,6 +58,7 @@ public class ViewConeRenderer : MonoBehaviour
 
     void GenerateCone()
     {
+
         float halfAngle = viewAngle * 0.5f;
         float angleStep = viewAngle / (rayCount - 1);
 
@@ -111,6 +115,15 @@ public class ViewConeRenderer : MonoBehaviour
                     }
                 }
             }
+        }
+
+        if (playerInSight && blackboard != null)
+        {
+            blackboard.Set("viewConePlayerSeen", true);
+        }
+        else if (blackboard != null)
+        {
+            blackboard.Set("viewConePlayerSeen", false);
         }
 
         //Mesh vertices data

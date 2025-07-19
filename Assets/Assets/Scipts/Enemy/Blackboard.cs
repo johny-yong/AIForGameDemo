@@ -14,13 +14,12 @@ public class Blackboard : MonoBehaviour
     }
 
     //Getting value
-    public object Get(string key)
+    public T Get<T>(string key)
     {
-        if (data.ContainsKey(key))
-            return data[key];
-        return null;
+        if (data.ContainsKey(key) && data[key] is T)
+            return (T)data[key];
+        return default(T);
     }
-
 
     //Check if it has the data
     public bool Has(string key) { return data.ContainsKey(key); }
@@ -35,7 +34,7 @@ public class Blackboard : MonoBehaviour
 For setting data:
 - blackboard.Set("WhateverData", value);
 For getting data:
-- blackboard.Get("WhateverData")
+- blackboard.Get<type>("WhateverData")
 For checking existance of data
 - blackboard.Has("WhateverData")
 For removing existance of data
