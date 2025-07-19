@@ -7,6 +7,9 @@ using UnityEngine;
 //Uses A* for shortest distance to move between way points as well as the player chasing
 //Currently when the player is touched, get back to previous (next) waypoint
 
+
+//Maybe need to add a persistancy logic behind the enemy AI?
+//To do: Try carry some data from project 3 into here...
 public class WaypointEnemyAI : MonoBehaviour
 {
     [Header("Patrol Settings")]
@@ -52,9 +55,15 @@ public class WaypointEnemyAI : MonoBehaviour
     [Header("Awareness")]
     public AwarenessMode awarenessMode = AwarenessMode.ViewCone;
 
+    private Blackboard blackboard;
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
+        //Automatically adding the blackboard
+        blackboard = GetComponent<Blackboard>();
+        if (blackboard == null) { 
+            blackboard = gameObject.AddComponent<Blackboard>();
+        }
     }
 
     void Update()
@@ -123,7 +132,7 @@ public class WaypointEnemyAI : MonoBehaviour
         Transform target = waypoints[currentWaypointIndex];
         //GridAStar.Instance.ResetHighlightedToWhite();
 
-        // If path is null, empty, or we’ve reached the end, recalculate
+        // If path is null, empty, or weï¿½ve reached the end, recalculate
         if (path == null || path.Count == 0 || pathIndex >= path.Count)
         {
             path = GridAStar.Instance.FindPath(transform.position, target.position);

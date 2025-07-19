@@ -51,7 +51,6 @@ public class ViewConeRenderer : MonoBehaviour
 
         target = GameObject.FindGameObjectWithTag("Player").transform;
         viewDistance = gameObject.GetComponentInParent<WaypointEnemyAI>().viewDistance;
-        Debug.Log("Initialise cone renderer");
     }
 
     void LateUpdate()
@@ -62,7 +61,7 @@ public class ViewConeRenderer : MonoBehaviour
 
     void GenerateCone()
     {
-        float halfAngle = viewAngle / 2f;
+        float halfAngle = viewAngle * 0.5f;
         float angleStep = viewAngle / (rayCount - 1);
 
         //Setting the origin here
@@ -94,7 +93,7 @@ public class ViewConeRenderer : MonoBehaviour
 
             points.Add(end);
 
-            float uvAngle = angle / viewAngle + 0.5f; //UV Angle
+            float uvAngle = angle / viewAngle; //UV Angle
             uvs.Add(new Vector2(uvAngle, 1f));
 
             //Player detected
