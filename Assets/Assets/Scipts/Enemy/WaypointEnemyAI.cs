@@ -10,7 +10,7 @@ using static GeneralEnemyData;
 
 
 //Maybe need to add a persistancy logic behind the enemy AI?
-//To do: Try carry some data from project 3 into here...
+//To do: Try carry some data from project 3 into here... maybe?
 
 //Currently while blackboard is implemented into the system already, but the usage not there yet
 //To be updated later on
@@ -42,6 +42,10 @@ public class WaypointEnemyAI : MonoBehaviour
 
     public ViewConeRenderer viewCone;
 
+    [Header("Vision Circle Settings")]
+    public CircularVisionRenderer circularVision;
+
+
     [Header("Poisson Sampling")]
     public int normalSampleCount = 50;
     public int alertSampleCount = 150;
@@ -57,6 +61,9 @@ public class WaypointEnemyAI : MonoBehaviour
 
     private Blackboard blackboard;
 
+    
+
+    //For path tracking
     public GameObject pathOrbPrefab;
     private List<GameObject> pathOrbs = new List<GameObject>();
 
@@ -75,6 +82,7 @@ void Update()
     {
         if (!player) return;
         viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
+        circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
         switch (enemyData.currentAwareness)
@@ -89,6 +97,9 @@ void Update()
 
             case AwarenessMode.PoissonDisc:
                 chasingPlayer = CheckPlayerInPoissonDisc();
+                break;
+            case AwarenessMode.CircularRadius:
+                chasingPlayer = circularVision.playerInSight;
                 break;
         }
 
@@ -127,13 +138,15 @@ void Update()
             }
 
             FollowPath();
-            if (!CheckPlayerInPoissonDisc() && (pathIndex >= path.Count))
+            if (path != null)
             {
-                chasingPlayer = false;
-                ClearPathOrbs();
-                path = null;
+                if (!CheckPlayerInPoissonDisc() && (pathIndex >= path.Count))
+                {
+                    chasingPlayer = false;
+                    ClearPathOrbs();
+                    path = null;
+                }
             }
-
         }
         else
         {

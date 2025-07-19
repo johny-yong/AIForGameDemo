@@ -9,7 +9,8 @@ public class GeneralEnemyData : MonoBehaviour
     {
         OmniScient,
         ViewCone,
-        PoissonDisc
+        PoissonDisc,
+        CircularRadius
     }
 
     public AwarenessMode currentAwareness;
@@ -47,6 +48,11 @@ public class GeneralEnemyData : MonoBehaviour
             showDottedPath = !showDottedPath;
             dottedPathText.text = UpdatePathText(showDottedPath);
         }
+        else if (Input.GetKeyUp(KeyCode.F5))
+        {
+            currentAwareness = AwarenessMode.CircularRadius;
+            displayText.text = UpdateAwarenessText(currentAwareness);
+        }
 
     }
 
@@ -59,6 +65,8 @@ public class GeneralEnemyData : MonoBehaviour
                 return "Enemy checking mode: Viewcone";
         case AwarenessMode.PoissonDisc:
                 return "Enemy checking mode: PoissonDisc";
+        case AwarenessMode.CircularRadius:
+                return "Enemy checking mode: Radius";
         }
 
         return "Enemy checking mode:";

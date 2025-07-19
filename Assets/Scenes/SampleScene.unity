@@ -646,6 +646,10 @@ PrefabInstance:
       value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+      propertyPath: circularVision
+      value: 
+      objectReference: {fileID: 1439320613}
+    - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: playerMask.m_Bits
       value: 128
       objectReference: {fileID: 0}
@@ -721,6 +725,28 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 1869872494}
   m_SourcePrefab: {fileID: 100100000, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+--- !u!114 &1347232108 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5785030483706765801, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+  m_PrefabInstance: {fileID: 801469271584567535}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b2160c14c290594484917382ed42a5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &1439320613 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5785030483706765801, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+  m_PrefabInstance: {fileID: 1283792606}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b2160c14c290594484917382ed42a5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1453192621
 GameObject:
   m_ObjectHideFlags: 0
@@ -1167,9 +1193,9 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1121967613}
     - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
-      propertyPath: playerMask.m_Bits
-      value: 128
-      objectReference: {fileID: 0}
+      propertyPath: circularVision
+      value: 
+      objectReference: {fileID: 1347232108}
     - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: waypoints.Array.data[0]
       value: 
