@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Wall
   - EnemyDataController
+  - Enemy
   layers:
   - Default
   - TransparentFX

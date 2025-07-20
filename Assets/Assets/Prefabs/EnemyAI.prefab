@@ -378,7 +378,7 @@ GameObject:
   - component: {fileID: 4959832513265409679}
   m_Layer: 8
   m_Name: EnemyAI
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -483,6 +483,9 @@ MonoBehaviour:
   playerMask:
     serializedVersion: 2
     m_Bits: 128
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 256
   viewCone: {fileID: 1107389539360952483}
   circularVision: {fileID: 5785030483706765801}
   normalSampleCount: 50
@@ -491,11 +494,6 @@ MonoBehaviour:
   backViewAngle: 180
   enemyData: {fileID: 0}
   confidenceThreshold: 0.304
-  communicationInterval: 1
-  enemyMask:
-    serializedVersion: 2
-    m_Bits: 256
-  sharedInfoDuration: 5
   pathOrbPrefab: {fileID: 2996963914568071532, guid: 172ea26df91a6a645aaa1f93341fe386, type: 3}
 --- !u!58 &1841268694706130159
 CircleCollider2D:
