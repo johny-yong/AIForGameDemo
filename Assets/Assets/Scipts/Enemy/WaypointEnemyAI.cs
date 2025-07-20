@@ -41,7 +41,7 @@ public class WaypointEnemyAI : MonoBehaviour
     public float confidenceThreshold = 0.3f;
 
     [Header("Last Known Position")]
-    public float lastKnownPositionTimeout = 5f; // How long to remember last known position
+    public float lastKnownPositionTimeout = 10f; // How long to remember last known position
 
     private Blackboard blackboard;
 
@@ -78,66 +78,8 @@ public class WaypointEnemyAI : MonoBehaviour
                 break;
             case AwarenessMode.PoissonDisc:
                 canSeePlayerDirectly = CheckPlayerInPoissonDisc();  //Direct Line of Sight
-
-                // Always check if we can see another enemy and share intel
-                GameObject detectedEnemy = GetDetectedEnemy();
-                if (detectedEnemy != null)
-                {
-                    Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
-                    if (enemyBlackboard != null)
-                    {
-                        bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
-                        bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
-
-                        // Determine who has the most recent intel
-                        float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
-                        float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
-
-                        // Share intel if either enemy is chasing and has more recent information
-                        if (thisEnemyChasing && thisLastSeen > otherLastSeen && thisLastSeen > 0f)
-                        {
-                            // This enemy shares intel to other enemy
-                            enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
-                            enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
-                            Debug.Log($"{name} shared intel with {detectedEnemy.name}");
-                        }
-                        else if (otherEnemyChasing && otherLastSeen > thisLastSeen && otherLastSeen > 0f)
-                        {
-                            // Other enemy shares intel to this enemy
-                            blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
-                            blackboard.Set("lastKnownPlayerTime", otherLastSeen);
-                            Debug.Log($"{detectedEnemy.name} shared intel with {name}");
-                        }
-                    }
-                }
-
-                // Determine if we should be chasing
-                isChasing = canSeePlayerDirectly; // Start with direct sight
-
-                // If we can see the player directly, update last known position
-                if (canSeePlayerDirectly)
-                {
-                    blackboard.Set("lastKnownPlayerPosition", player.position);
-                    blackboard.Set("lastKnownPlayerTime", Time.time);
-                  
-                }
-                // If we don't have direct sight, check if we should chase based on intel or last known position
-                else if (blackboard.Has("lastKnownPlayerTime"))
-                {
-                    float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
-                    float timeSinceLastSeen = Time.time - lastSeenTime;
-
-                    // Continue chasing if we have recent intel
-                    if (timeSinceLastSeen < lastKnownPositionTimeout)
-                    {
-                        isChasing = true;
-                    }
-                }
+                isChasing = EnemyAndPlayerCheck(canSeePlayerDirectly);  //Check both enemy and player line of sight
                 break;
-
-
-
-
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
                 break;
@@ -182,7 +124,7 @@ public class WaypointEnemyAI : MonoBehaviour
             FollowPath();
             int pathIdx = blackboard.Get<int>("pathIndex");
 
-            // Stop chasing if timeout exceeded and reached last known position
+            //Timer for the enemy to return to patrol if reached the last known position
             if (path != null && pathIdx >= path.Count)
             {
                 if (blackboard.Has("lastKnownPlayerTime"))
@@ -208,6 +150,70 @@ public class WaypointEnemyAI : MonoBehaviour
             Patrol();
         }
     }
+
+    bool EnemyAndPlayerCheck(bool canSeePlayerDirectly) {
+
+        // Always check if we can see another enemy and share intel
+        GameObject detectedEnemy = GetDetectedEnemy();
+        if (detectedEnemy != null)
+        {
+            Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
+            if (enemyBlackboard != null)
+            {
+                bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+                bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
+
+                // Determine who has the most recent intel
+                float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
+                float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
+
+                // Share intel if either enemy is chasing and has more recent information
+                if (thisEnemyChasing && thisLastSeen > otherLastSeen && thisLastSeen > 0f)
+                {
+                    // This enemy shares intel to other enemy
+                    enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
+                    enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
+                    Debug.Log($"{name} shared intel with {detectedEnemy.name}");
+                }
+                else if (otherEnemyChasing && otherLastSeen > thisLastSeen && otherLastSeen > 0f)
+                {
+                    // Other enemy shares intel to this enemy
+                    blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
+                    blackboard.Set("lastKnownPlayerTime", otherLastSeen);
+                    Debug.Log($"{detectedEnemy.name} shared intel with {name}");
+                }
+            }
+        }
+
+        // Determine if we should be chasing
+        bool isChasing = canSeePlayerDirectly; // Start with direct sight
+
+        // If we can see the player directly, update last known position
+        if (canSeePlayerDirectly)
+        {
+            blackboard.Set("lastKnownPlayerPosition", player.position);
+            blackboard.Set("lastKnownPlayerTime", Time.time);
+
+        }
+        // If we don't have direct sight, check if we should chase based on intel or last known position
+        else if (blackboard.Has("lastKnownPlayerTime"))
+        {
+            float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
+            float timeSinceLastSeen = Time.time - lastSeenTime;
+
+            // Continue chasing if we have recent intel
+            if (timeSinceLastSeen < lastKnownPositionTimeout)
+            {
+                isChasing = true;
+            }
+        }
+
+        return isChasing;
+
+    }
+
+
+
     void Patrol()
     {
         if (waypoints.Length == 0) return;
