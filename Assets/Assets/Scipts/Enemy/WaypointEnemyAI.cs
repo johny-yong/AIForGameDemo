@@ -24,6 +24,7 @@ public class WaypointEnemyAI : MonoBehaviour
     public int rayCount = 30;
     public LayerMask obstacleMask;
     public LayerMask playerMask;
+    public LayerMask enemyMask;
     public ViewConeRenderer viewCone;
 
     [Header("Vision Circle Settings")]
@@ -38,6 +39,9 @@ public class WaypointEnemyAI : MonoBehaviour
 
     [Range(0f, 1f)]
     public float confidenceThreshold = 0.3f;
+
+    [Header("Last Known Position")]
+    public float lastKnownPositionTimeout = 5f; // How long to remember last known position
 
     private Blackboard blackboard;
 
@@ -62,6 +66,8 @@ public class WaypointEnemyAI : MonoBehaviour
         circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
 
         bool isChasing = false;
+        bool canSeePlayerDirectly = false;
+
         switch (enemyData.currentAwareness)
         {
             case AwarenessMode.OmniScient:
@@ -71,8 +77,67 @@ public class WaypointEnemyAI : MonoBehaviour
                 isChasing = blackboard.Has("viewConePlayerSeen") && blackboard.Get<bool>("viewConePlayerSeen");
                 break;
             case AwarenessMode.PoissonDisc:
-                isChasing = CheckPlayerInPoissonDisc();
+                canSeePlayerDirectly = CheckPlayerInPoissonDisc();  //Direct Line of Sight
+
+                // Always check if we can see another enemy and share intel
+                GameObject detectedEnemy = GetDetectedEnemy();
+                if (detectedEnemy != null)
+                {
+                    Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
+                    if (enemyBlackboard != null)
+                    {
+                        bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+                        bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
+
+                        // Determine who has the most recent intel
+                        float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
+                        float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
+
+                        // Share intel if either enemy is chasing and has more recent information
+                        if (thisEnemyChasing && thisLastSeen > otherLastSeen && thisLastSeen > 0f)
+                        {
+                            // This enemy shares intel to other enemy
+                            enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
+                            enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
+                            Debug.Log($"{name} shared intel with {detectedEnemy.name}");
+                        }
+                        else if (otherEnemyChasing && otherLastSeen > thisLastSeen && otherLastSeen > 0f)
+                        {
+                            // Other enemy shares intel to this enemy
+                            blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
+                            blackboard.Set("lastKnownPlayerTime", otherLastSeen);
+                            Debug.Log($"{detectedEnemy.name} shared intel with {name}");
+                        }
+                    }
+                }
+
+                // Determine if we should be chasing
+                isChasing = canSeePlayerDirectly; // Start with direct sight
+
+                // If we can see the player directly, update last known position
+                if (canSeePlayerDirectly)
+                {
+                    blackboard.Set("lastKnownPlayerPosition", player.position);
+                    blackboard.Set("lastKnownPlayerTime", Time.time);
+                  
+                }
+                // If we don't have direct sight, check if we should chase based on intel or last known position
+                else if (blackboard.Has("lastKnownPlayerTime"))
+                {
+                    float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
+                    float timeSinceLastSeen = Time.time - lastSeenTime;
+
+                    // Continue chasing if we have recent intel
+                    if (timeSinceLastSeen < lastKnownPositionTimeout)
+                    {
+                        isChasing = true;
+                    }
+                }
                 break;
+
+
+
+
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
                 break;
@@ -86,9 +151,18 @@ public class WaypointEnemyAI : MonoBehaviour
 
             if (repathTimer >= repathInterval)
             {
-                path = GridAStar.Instance.FindPath(transform.position, player.position);
+                Vector3 targetPosition = player.position;
+
+                // If we can't see player directly but have last known position, use that
+                if (!canSeePlayerDirectly && blackboard.Has("lastKnownPlayerPosition"))
+                {
+                    targetPosition = blackboard.Get<Vector3>("lastKnownPlayerPosition");
+                }
+
+
+                path = GridAStar.Instance.FindPath(transform.position, targetPosition);
                 blackboard.Set("path", path);
-                blackboard.Set("playerPosition", player.position);
+                blackboard.Set("playerPosition", targetPosition);
                 blackboard.Set("pathIndex", 0);
                 repathTimer = 0f;
                 ClearPathOrbs();
@@ -99,7 +173,7 @@ public class WaypointEnemyAI : MonoBehaviour
                     {
                         GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
                         orb.transform.localScale *= 3f;
-                        orb.GetComponent<SpriteRenderer>().color = Color.black;
+                        orb.GetComponent<SpriteRenderer>().color = Color.red; // Red for last known position
                         pathOrbs.Add(orb);
                     }
                 }
@@ -107,11 +181,26 @@ public class WaypointEnemyAI : MonoBehaviour
 
             FollowPath();
             int pathIdx = blackboard.Get<int>("pathIndex");
-            if (path != null && !CheckPlayerInPoissonDisc() && pathIdx >= path.Count)
+
+            // Stop chasing if timeout exceeded and reached last known position
+            if (path != null && pathIdx >= path.Count)
             {
-                blackboard.Set("chasingPlayer", false);
-                path = null;
-                ClearPathOrbs();
+                if (blackboard.Has("lastKnownPlayerTime"))
+                {
+                    float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
+                    if (Time.time - lastSeenTime >= lastKnownPositionTimeout)
+                    {
+                        blackboard.Set("chasingPlayer", false);
+                        path = null;
+                        ClearPathOrbs();
+                    }
+                }
+                else
+                {
+                    blackboard.Set("chasingPlayer", false);
+                    path = null;
+                    ClearPathOrbs();
+                }
             }
         }
         else
@@ -119,7 +208,6 @@ public class WaypointEnemyAI : MonoBehaviour
             Patrol();
         }
     }
-
     void Patrol()
     {
         if (waypoints.Length == 0) return;
@@ -209,12 +297,58 @@ public class WaypointEnemyAI : MonoBehaviour
 
             if (hit.collider != null && hit.transform == player)
             {
-                Debug.Log($"Player hit at confidence {confidence}");
+                //Debug.Log($"Player hit at confidence {confidence}");
                 return true;
             }
         }
         return false;
     }
+
+    //Function to detect enemies
+    GameObject GetDetectedEnemy()
+    {
+        bool isSuspicious = blackboard.Has("suspicious") && blackboard.Get<bool>("suspicious");
+        bool isChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+        int currentSampleCount = isSuspicious || isChasing ? alertSampleCount : normalSampleCount;
+
+        var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
+        GameObject detectedEnemy = CheckSamplesForEnemyObject(frontSamples, 1.0f);
+        if (detectedEnemy != null)
+        {
+            //Debug.Log($"{name} detected enemy {detectedEnemy.name} in FRONT Poisson disc sampling with {frontSamples.Count} samples");
+            return detectedEnemy;
+        }
+
+        int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
+        var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
+        detectedEnemy = CheckSamplesForEnemyObject(backSamples, 0.5f);
+        if (detectedEnemy != null)
+        {
+            //Debug.Log($"{name} detected enemy {detectedEnemy.name} in BACK Poisson disc sampling with {backSamples.Count} samples");
+            return detectedEnemy;
+
+        }
+
+        return null;
+    }
+
+    //Function to check Poisson Disk samples for enemy objects
+    GameObject CheckSamplesForEnemyObject(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
+    {
+        foreach (var s in samples)
+        {
+            Vector3 worldSample = transform.position + s.direction * s.radius;
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
+
+            if (hit.collider != null && hit.transform.CompareTag("Enemy"))
+            {
+                //Debug.Log($"Detected Enemy");
+                return hit.transform.gameObject;
+            }
+        }
+        return null;
+    }
+
 
     void ClearPathOrbs()
     {
