@@ -376,9 +376,9 @@ GameObject:
   - component: {fileID: 6644435476855192171}
   - component: {fileID: 1841268694706130159}
   - component: {fileID: 4959832513265409679}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: EnemyAI
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -441,7 +441,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_Sprite: {fileID: 21300000, guid: ac4bc3decbfcf02439b8590f9bf725e2, type: 3}
   m_Color: {r: 0.5622641, g: 0.049861126, b: 0.049861126, a: 1}
   m_FlipX: 0
@@ -492,6 +492,8 @@ MonoBehaviour:
   enemyData: {fileID: 0}
   confidenceThreshold: 0.3
   pathOrbPrefab: {fileID: 2996963914568071532, guid: 172ea26df91a6a645aaa1f93341fe386, type: 3}
+  suspiciousPrefab: {fileID: 6543135843185577307, guid: fbff01d43aacdc446bff9451ecadb0aa, type: 3}
+  alertPrefab: {fileID: 4534507172888472804, guid: 2b7864290bc03084cac8357068580220, type: 3}
 --- !u!58 &1841268694706130159
 CircleCollider2D:
   m_ObjectHideFlags: 0
