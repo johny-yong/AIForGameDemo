@@ -77,8 +77,8 @@ public class WaypointEnemyAI : MonoBehaviour
                 isChasing = blackboard.Has("viewConePlayerSeen") && blackboard.Get<bool>("viewConePlayerSeen");
                 break;
             case AwarenessMode.PoissonDisc:
-                canSeePlayerDirectly = CheckPlayerInPoissonDisc();  //Direct Line of Sight of player
-                isChasing = SharingIntelBetweenEnemies(canSeePlayerDirectly);  //Sharing intel with other enemies 
+                canSeePlayerDirectly = CheckPlayerInPoissonDisc();              //Direct Line of Sight of player
+                isChasing = SharingChasingIntelBetweenEnemies(canSeePlayerDirectly);   //Sharing Chasing intel with other enemies 
                 break;
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
@@ -151,7 +151,7 @@ public class WaypointEnemyAI : MonoBehaviour
         }
     }
 
-    bool SharingIntelBetweenEnemies(bool canSeePlayerDirectly) {
+    bool SharingChasingIntelBetweenEnemies(bool canSeePlayerDirectly) {
 
         // Always check if we can see another enemy and share intel
         GameObject detectedEnemy = GetDetectedEnemy();
@@ -168,14 +168,14 @@ public class WaypointEnemyAI : MonoBehaviour
                 float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
 
                 // Share intel if either enemy is chasing and has more recent information
-                if (thisEnemyChasing && thisLastSeen > otherLastSeen && thisLastSeen > 0f)
+                if (thisEnemyChasing && thisLastSeen > otherLastSeen)
                 {
                     // This enemy shares intel to other enemy
                     enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
                     enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
                     Debug.Log($"{name} shared intel with {detectedEnemy.name}");
                 }
-                else if (otherEnemyChasing && otherLastSeen > thisLastSeen && otherLastSeen > 0f)
+                else if (otherEnemyChasing && otherLastSeen > thisLastSeen)
                 {
                     // Other enemy shares intel to this enemy
                     blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
