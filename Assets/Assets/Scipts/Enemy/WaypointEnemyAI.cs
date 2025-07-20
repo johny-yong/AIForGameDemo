@@ -77,8 +77,8 @@ public class WaypointEnemyAI : MonoBehaviour
                 isChasing = blackboard.Has("viewConePlayerSeen") && blackboard.Get<bool>("viewConePlayerSeen");
                 break;
             case AwarenessMode.PoissonDisc:
-                canSeePlayerDirectly = CheckPlayerInPoissonDisc();  //Direct Line of Sight
-                isChasing = EnemyAndPlayerCheck(canSeePlayerDirectly);  //Check both enemy and player line of sight
+                canSeePlayerDirectly = CheckPlayerInPoissonDisc();  //Direct Line of Sight of player
+                isChasing = SharingIntelBetweenEnemies(canSeePlayerDirectly);  //Sharing intel with other enemies 
                 break;
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
@@ -151,7 +151,7 @@ public class WaypointEnemyAI : MonoBehaviour
         }
     }
 
-    bool EnemyAndPlayerCheck(bool canSeePlayerDirectly) {
+    bool SharingIntelBetweenEnemies(bool canSeePlayerDirectly) {
 
         // Always check if we can see another enemy and share intel
         GameObject detectedEnemy = GetDetectedEnemy();
@@ -186,29 +186,22 @@ public class WaypointEnemyAI : MonoBehaviour
         }
 
         // Determine if we should be chasing
-        bool isChasing = canSeePlayerDirectly; // Start with direct sight
-
         // If we can see the player directly, update last known position
         if (canSeePlayerDirectly)
         {
             blackboard.Set("lastKnownPlayerPosition", player.position);
             blackboard.Set("lastKnownPlayerTime", Time.time);
-
+            return true; // We are chasing if we can see the player directly
         }
-        // If we don't have direct sight, check if we should chase based on intel or last known position
-        else if (blackboard.Has("lastKnownPlayerTime"))
+        // Can't see player directly - check if we should chase based on recent intel
+        if (blackboard.Has("lastKnownPlayerTime"))
         {
             float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
             float timeSinceLastSeen = Time.time - lastSeenTime;
-
-            // Continue chasing if we have recent intel
-            if (timeSinceLastSeen < lastKnownPositionTimeout)
-            {
-                isChasing = true;
-            }
+            return timeSinceLastSeen < lastKnownPositionTimeout;
         }
 
-        return isChasing;
+        return false; // No recent intel, don't chase
 
     }
 
