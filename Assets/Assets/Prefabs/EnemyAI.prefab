@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 3389890560417792221}
   - component: {fileID: 7316216381955363943}
   - component: {fileID: 2834434233690563380}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: PoissonDisc
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -158,7 +158,7 @@ GameObject:
   - component: {fileID: 3436838804584444991}
   - component: {fileID: 5400880870746785468}
   - component: {fileID: 5785030483706765801}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: CircleVision
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -266,7 +266,7 @@ GameObject:
   - component: {fileID: 3217428311851305505}
   - component: {fileID: 2967446164937425559}
   - component: {fileID: 1107389539360952483}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Viewcone
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -376,7 +376,7 @@ GameObject:
   - component: {fileID: 6644435476855192171}
   - component: {fileID: 1841268694706130159}
   - component: {fileID: 4959832513265409679}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: EnemyAI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -490,7 +490,12 @@ MonoBehaviour:
   backViewDistance: 5
   backViewAngle: 180
   enemyData: {fileID: 0}
-  confidenceThreshold: 0.3
+  confidenceThreshold: 0.304
+  communicationInterval: 1
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 256
+  sharedInfoDuration: 5
   pathOrbPrefab: {fileID: 2996963914568071532, guid: 172ea26df91a6a645aaa1f93341fe386, type: 3}
 --- !u!58 &1841268694706130159
 CircleCollider2D:

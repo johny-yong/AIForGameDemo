@@ -675,11 +675,11 @@ PrefabInstance:
       objectReference: {fileID: 1157004609}
     - target: {fileID: 7313365416600266833, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.65
+      value: 0.41
       objectReference: {fileID: 0}
     - target: {fileID: 7313365416600266833, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -4.41
+      value: -4.8
       objectReference: {fileID: 0}
     - target: {fileID: 7313365416600266833, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: m_LocalPosition.z
@@ -1196,6 +1196,10 @@ PrefabInstance:
       propertyPath: circularVision
       value: 
       objectReference: {fileID: 1347232108}
+    - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+      propertyPath: detectionRange
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 6644435476855192171, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       propertyPath: waypoints.Array.data[0]
       value: 
@@ -4320,11 +4324,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3830903059462176276, guid: 7963d715d44cd5e45967cb89d9db694f, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 6.36
+      value: 16.55
       objectReference: {fileID: 0}
     - target: {fileID: 3830903059462176276, guid: 7963d715d44cd5e45967cb89d9db694f, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.59
+      value: -3.13
       objectReference: {fileID: 0}
     - target: {fileID: 3830903059462176276, guid: 7963d715d44cd5e45967cb89d9db694f, type: 3}
       propertyPath: m_LocalPosition.z
