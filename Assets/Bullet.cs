@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class Bullet : MonoBehaviour
 {
@@ -17,6 +18,22 @@ public class Bullet : MonoBehaviour
     {
         if (collision.gameObject.layer == LayerMask.NameToLayer("Wall"))
             Destroy(gameObject);
+        else if (!collision.gameObject.CompareTag(gameObject.tag))
+        {
+            if (collision.tag == "Enemy")
+            {
+                collision.GetComponent<EnemyStats>().Heal(-10);
+                if (collision.GetComponent<EnemyStats>().currentHealth <= 0)
+                    Destroy(collision.gameObject);
+            }
+            else
+            {
+                collision.GetComponent<PlayerStats>().Heal(-10);
+                if (collision.GetComponent<PlayerStats>().currentHealth <= 0)
+                    SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            }
+            Destroy(gameObject);
+        }
     }
 }
 

@@ -14,7 +14,6 @@ public class EnemyStats : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        currentHealth = 80;
         UpdateHealthUI();
     }
 
@@ -31,4 +30,5 @@ public class EnemyStats : MonoBehaviour
             healthText.text = $"HP: {currentHealth}/{maxHealth}";
         }
     }
+
 }

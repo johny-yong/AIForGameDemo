@@ -43,7 +43,7 @@ public class PlayerController : MonoBehaviour
 
         if (movement.sqrMagnitude > 0.001f)
         {
-           if (enemyData.canHearSound)
+            if (enemyData.canHearSound)
             {
                 emitter.EmitSound();
             }

@@ -168,6 +168,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
         if (detectedEnemy != null)
         {
             Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
+            Debug.Log(detectedEnemy.name == gameObject.name);
             if (enemyBlackboard != null)
             {
                 ShareHealthPackIntel(enemyBlackboard);
@@ -239,7 +240,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     bool HandlePoissonDiscBehaviorSimplified(bool canSeePlayerDirectly)
     {
         EnemyStats enemyStats = GetComponent<EnemyStats>();
-        bool needsHealth = enemyStats.currentHealth < enemyStats.maxHealth;
+        bool needsHealth = enemyStats.currentHealth < enemyStats.maxHealth * 0.5f; // only search for healthpack once below 50%
 
         // If we need health, try to find a health pack from memory
         if (needsHealth)
@@ -608,7 +609,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             if (detectedEnemy == null)
             {
                 RaycastHit2D enemyHit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
-                if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy"))
+                if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy") && enemyHit.collider.gameObject != gameObject)
                 {
                     detectedEnemy = enemyHit.transform.gameObject;
                 }
