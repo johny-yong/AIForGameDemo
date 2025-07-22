@@ -1,20 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.XR;
 using static GeneralEnemyData;
 
-//AI Logic
-//Uses Waypoint for idling (Need ownself set the position of the waypoints per AI)
-//Uses A* for shortest distance to move between way points as well as the player chasing
-//Currently when the player is touched, get back to previous (next) waypoint
-
-
-//Maybe need to add a persistancy logic behind the enemy AI?
-//To do: Try carry some data from project 3 into here...
-
-//Currently while blackboard is implemented into the system already, but the usage not there yet
-//To be updated later on
-public class WaypointEnemyAI : MonoBehaviour
+public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 {
     [Header("Patrol Settings")]
     public Transform[] waypoints;
@@ -26,11 +16,7 @@ public class WaypointEnemyAI : MonoBehaviour
     public float detectionRange = 5f;
     public float repathInterval = 0.5f;
 
-    [Header("Waypoints")]
-    private int currentWaypointIndex = 0;
-    private bool chasingPlayer = false;
     private List<Vector3> path = new List<Vector3>();
-    private int pathIndex = 0;
     private float repathTimer = 0f;
 
     [Header("Vision Cone Settings")]
@@ -39,20 +25,19 @@ public class WaypointEnemyAI : MonoBehaviour
     public int rayCount = 30;
     public LayerMask obstacleMask;
     public LayerMask playerMask;
-
     public ViewConeRenderer viewCone;
+
+    [Header("Vision Circle Settings")]
+    public CircularVisionRenderer circularVision;
 
     [Header("Poisson Sampling")]
     public int normalSampleCount = 50;
     public int alertSampleCount = 150;
-    private bool suspicious = false; // Could be set based on hearing or other cues
     public float backViewDistance = 5f;
     public float backViewAngle = 180f;
-
     public GeneralEnemyData enemyData;
 
-    //The actual one
-    [Range(0f, 1f)] 
+    [Range(0f, 1f)]
     public float confidenceThreshold = 0.3f;
 
     private Blackboard blackboard;
@@ -60,84 +45,83 @@ public class WaypointEnemyAI : MonoBehaviour
     public GameObject pathOrbPrefab;
     private List<GameObject> pathOrbs = new List<GameObject>();
 
+    #region SoundReceiver
+    private Vector3 lastHeardPosition = Vector3.positiveInfinity;
+
+    void OnEnable() => SoundDetectionManager.RegisterListener(this);
+    void OnDisable() => SoundDetectionManager.UnregisterListener(this);
+
+    public void OnHearSound(SoundEvent e, float effectiveVolume)
+    {
+        if (!blackboard.Get<bool>("canHear")) return;
+
+        //Calculate importance based on type and volume
+        float importance = effectiveVolume;
+        if (e.type == SoundType.Footstep) importance *= 1.5f;
+
+        //Only react if sound is important enough
+        if (importance > confidenceThreshold)
+        {
+            blackboard.Set("heardSound", true);
+            blackboard.Set("heardPosition", e.sourcePosition);
+            blackboard.Set("heardType", e.type.ToString());
+            blackboard.Set("heardVolume", effectiveVolume);
+            blackboard.Set("heardFrequency", e.frequency);
+            blackboard.Set("heardIsDirect", e.isDirect);
+
+            //If sound is muffled, move more cautiously
+            float speedModifier = e.isDirect ? 1f : 0.7f;
+            blackboard.Set("investigationSpeed", moveSpeed * speedModifier);
+            Debug.Log(gameObject.name + " heard something....");
+        }
+    }
+
+    public Vector3 GetPosition() => transform.position;
+    #endregion
+
+    [SerializeField] private GameObject suspiciousPrefab;
+    [SerializeField] private GameObject alertPrefab;
+
+    private GameObject currentIcon;
+    private Coroutine iconRoutine;
+
+    private float suspiciousTimer = 0f;
+    public float suspiciousCooldown = 2f; // seconds
+
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
-        //Automatically adding the blackboard
-        blackboard = GetComponent<Blackboard>();
-        if (blackboard == null) { 
-            blackboard = gameObject.AddComponent<Blackboard>();
-        }
+        blackboard = GetComponent<Blackboard>() ?? gameObject.AddComponent<Blackboard>();
         enemyData = GameObject.FindGameObjectWithTag("EnemyDataController").GetComponent<GeneralEnemyData>();
-}
 
-void Update()
+        blackboard.Set("pathIndex", 0);
+        blackboard.Set("canHear", enemyData.canHearSound);
+        SoundDetectionManager.occlusionMask = LayerMask.GetMask("Wall");
+    }
+
+    void Update()
     {
         if (!player) return;
+
         viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
+        circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
+        blackboard.Set("canHear", enemyData.canHearSound);
 
-        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        switch (enemyData.currentAwareness)
+        bool isChasing = UpdateChasingState();
+        blackboard.Set("chasingPlayer", isChasing);
+
+        bool heardSound = ProcessHearing(isChasing);
+        ProcessMovement(isChasing, heardSound);
+        UpdateIconDisplay(isChasing, heardSound);
+
+        if (suspiciousTimer > 0f)
         {
-            case AwarenessMode.OmniScient:
-                chasingPlayer = true;
-                break;
-
-            case AwarenessMode.ViewCone:
-                chasingPlayer = viewCone.playerInSight;
-                break;
-
-            case AwarenessMode.PoissonDisc:
-                chasingPlayer = CheckPlayerInPoissonDisc();
-                break;
-        }
-
-        if (chasingPlayer)
-        {
-            repathTimer += Time.deltaTime;
-
-            if (repathTimer >= repathInterval)
-            {
-                path = GridAStar.Instance.FindPath(transform.position, player.position);
-                ClearPathOrbs();
-                if (enemyData.showDottedPath)
-                {
-                    foreach (Vector3 pos in path)
-                    {
-                        GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
-                        orb.transform.localScale = new Vector3(orb.transform.localScale.x * 3f, orb.transform.localScale.y * 3f, orb.transform.localScale.z * 3f);
-                        orb.GetComponent<SpriteRenderer>().color = Color.black;
-                        pathOrbs.Add(orb);
-                    }
-                }
-
-                pathIndex = 0;
-                repathTimer = 0f;
-
-                if (path == null)
-                {
-                    Debug.LogWarning("No path found to player!");
-                    ClearPathOrbs();         
-                }
-                else
-                {
-                    Debug.Log("Path found with " + path.Count + " steps.");
-                }
-
-            }
-
-            FollowPath();
-            if (!CheckPlayerInPoissonDisc() && (pathIndex >= path.Count))
-            {
-                chasingPlayer = false;
-                ClearPathOrbs();
-                path = null;
-            }
-
+            suspiciousTimer -= Time.deltaTime;
+            blackboard.Set("suspicious", true);
         }
         else
         {
-            Patrol();
+            blackboard.Set("suspicious", false);
         }
     }
 
@@ -145,69 +129,49 @@ void Update()
     {
         if (waypoints.Length == 0) return;
 
+        int currentWaypointIndex = blackboard.Has("waypointIndex") ? blackboard.Get<int>("waypointIndex") : 0;
         Transform target = waypoints[currentWaypointIndex];
-        //GridAStar.Instance.ResetHighlightedToWhite();
 
-        // If path is null, empty, or we�ve reached the end, recalculate
-        if (path == null || path.Count == 0 || pathIndex >= path.Count)
+        int pathIdx = blackboard.Get<int>("pathIndex");
+
+        if (path == null || path.Count == 0 || pathIdx >= path.Count)
         {
             path = GridAStar.Instance.FindPath(transform.position, target.position);
-            pathIndex = 0;
-
-            if (path == null || path.Count == 0)
-                return; // No path = can't move
+            blackboard.Set("path", path);
+            blackboard.Set("pathIndex", 0);
         }
 
         FollowPath();
 
-        if (path != null && path.Count > 0 && Vector3.Distance(transform.position, path[path.Count - 1]) <= reachDistance)
+        if (path != null && path.Count > 0 && Vector3.Distance(transform.position, path[^1]) <= reachDistance)
         {
-            Debug.Log("Reached waypoint " + currentWaypointIndex);
             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
+            blackboard.Set("waypointIndex", currentWaypointIndex);
             path = null;
             ClearPathOrbs();
         }
     }
 
-    bool CanSeePlayer()
-    {
-        if (player == null) return false;
-
-        Vector3 dirToPlayer = (player.position - transform.position).normalized;
-        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-
-        //Angular forward of the AI
-        float angleToPlayer = Vector3.Angle(transform.up, dirToPlayer);
-        if (angleToPlayer > viewAngle * 0.5f || distanceToPlayer > viewDistance)
-            return false;
-
-        //Using raycast
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, dirToPlayer, viewDistance, obstacleMask);
-        if (hit.collider != null && hit.collider.transform != player)
-            return false;
-
-        return true;
-    }
-
-
-
     void FollowPath()
     {
-        if (path == null || path.Count == 0 || pathIndex >= path.Count)
-            return;
+        path = blackboard.Get<List<Vector3>>("path");
+        int pathIndex = blackboard.Get<int>("pathIndex");
+
+        if (path == null || path.Count == 0 || pathIndex >= path.Count) return;
 
         Vector3 target = path[pathIndex];
         MoveTowards(target);
 
         if (Vector3.Distance(transform.position, target) <= reachDistance)
-            pathIndex++;
+        {
+            blackboard.Set("pathIndex", pathIndex + 1);
+        }
     }
-
 
     void MoveTowards(Vector3 target)
     {
         Vector3 current = transform.position;
-        target.z = current.z; 
+        target.z = current.z;
 
         Vector3 direction = (target - current).normalized;
 
@@ -215,108 +179,207 @@ void Update()
         {
             float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
             Quaternion targetRotation = Quaternion.Euler(0, 0, targetAngle);
-
-            float rotationSpeed = 360f;
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, 360f * Time.deltaTime);
         }
 
         transform.position = current + direction * moveSpeed * Time.deltaTime;
     }
+
     bool CheckPlayerInPoissonDisc()
     {
-        if (!player) return false;
+        bool isSuspicious = false;
+        bool isAlerted = false;
 
-        int currentSampleCount = suspicious || chasingPlayer ? alertSampleCount : normalSampleCount;
+        bool alreadyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+        int currentSampleCount = alreadyChasing ? alertSampleCount : normalSampleCount;
 
-        //Front cone
         var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
-        if (CheckSamplesForPlayer(frontSamples, 1.0f))
-            return true;
+        if (ProcessSamples(frontSamples, 1.0f, out isSuspicious, out isAlerted)) return true;
 
-        //Back cone
         int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
-
         var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
-        if (CheckSamplesForPlayer(backSamples, 0.5f))
-            return true;
+        if (ProcessSamples(backSamples, 0.5f, out isSuspicious, out isAlerted)) return true;
 
+        blackboard.Set("suspicious", false);
         return false;
     }
 
-    bool CheckSamplesForPlayer(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
+    bool ProcessSamples(List<PoissonDiscSampler.Sample> samples, float maxConfidence, out bool suspicious, out bool confirmed)
     {
+        suspicious = false;
+        confirmed = false;
+
         foreach (var s in samples)
         {
             float confidence = Mathf.Min(s.confidence, maxConfidence);
-            if (confidence < confidenceThreshold) continue;
+            if (confidence < confidenceThreshold * 0.5f) continue;
 
             Vector3 worldSample = transform.position + s.direction * s.radius;
             RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | playerMask);
 
             if (hit.collider != null && hit.transform == player)
             {
-                Debug.Log($"Player hit at confidence {confidence}");
-                return true;
+                if (confidence >= confidenceThreshold)
+                {
+                    confirmed = true;
+                    blackboard.Set("suspicious", false);
+                    return true;// Fully confirmed sighting
+                }
+                else
+                {
+                    suspicious = true;
+                    blackboard.Set("suspicious", true);
+                    suspiciousTimer = suspiciousCooldown;
+                    return false;
+                }
             }
         }
+
+        blackboard.Set("suspicious", false);
         return false;
     }
 
     void ClearPathOrbs()
     {
         foreach (var orb in pathOrbs)
-        {
             if (orb) Destroy(orb);
-        }
         pathOrbs.Clear();
     }
-
-    private void OnDrawGizmosSelected()
+    bool UpdateChasingState()
     {
-        //if (waypoints == null || waypoints.Length < 2) return;
-
-        //Gizmos.color = Color.yellow;
-        //for (int i = 0; i < waypoints.Length; i++)
-        //{
-        //    if (waypoints[i] != null)
-        //    {
-        //        Gizmos.DrawSphere(waypoints[i].position, 0.15f);
-        //        int next = (i + 1) % waypoints.Length;
-        //        if (waypoints[next] != null)
-        //            Gizmos.DrawLine(waypoints[i].position, waypoints[next].position);
-        //    }
-        //}
-
-        #region Cone shaped FOV
-        if (player != null)
+        switch (enemyData.currentAwareness)
         {
-            Gizmos.color = Color.red;
-            Vector3 origin = transform.position;
-            Vector3 forward = transform.up;
+            case AwarenessMode.OmniScient:
+                return true;
+            case AwarenessMode.ViewCone:
+                return blackboard.Get<bool>("viewConePlayerSeen");
+            case AwarenessMode.PoissonDisc:
+                return CheckPlayerInPoissonDisc();
+            case AwarenessMode.CircularRadius:
+                return blackboard.Get<bool>("circlePlayerSeen");
+            default:
+                return false;
+        }
+    }
 
-            float halfAngle = viewAngle / 2f;
-            Quaternion leftRayRot = Quaternion.Euler(0, 0, -halfAngle);
-            Quaternion rightRayRot = Quaternion.Euler(0, 0, halfAngle);
 
-            Vector3 leftRayDir = leftRayRot * forward;
-            Vector3 rightRayDir = rightRayRot * forward;
+    bool ProcessHearing(bool isChasing)
+    {
+        bool heardSound = enemyData.canHearSound && blackboard.Get<bool>("heardSound");
 
-            Gizmos.DrawLine(origin, origin + leftRayDir * viewDistance);
-            Gizmos.DrawLine(origin, origin + rightRayDir * viewDistance);
+        if (heardSound && !isChasing)
+        {
+            Vector3 soundPos = blackboard.Get<Vector3>("heardPosition");
+            blackboard.Set("suspicious", true);
+            suspiciousTimer = suspiciousCooldown;
 
-            // Draw fan rays for debug
-            for (int i = 0; i <= rayCount; i++)
+            repathTimer += Time.deltaTime;
+            if (repathTimer >= repathInterval)
             {
-                float t = (float)i / rayCount;
-                float angle = Mathf.Lerp(-halfAngle, halfAngle, t);
-                Vector3 dir = Quaternion.Euler(0, 0, angle) * forward;
+                path = GridAStar.Instance.FindPath(transform.position, soundPos);
+                blackboard.Set("path", path);
+                blackboard.Set("pathIndex", 0);
+                repathTimer = 0f;
+                ClearPathOrbs();
+            }
 
-                RaycastHit2D hit = Physics2D.Raycast(origin, dir, viewDistance, obstacleMask);
-                Vector3 end = hit.collider ? hit.point : origin + dir * viewDistance;
+            FollowPath();
 
-                Gizmos.DrawLine(origin, end);
+            int pathIdx = blackboard.Get<int>("pathIndex");
+            if (path != null && pathIdx >= path.Count)
+            {
+                blackboard.Set("heardSound", false);
+                path = null;
+                ClearPathOrbs();
             }
         }
-        #endregion
+
+        return heardSound;
     }
+
+    void ProcessMovement(bool isChasing, bool heardSound)
+    {
+        if (isChasing)
+        {
+            repathTimer += Time.deltaTime;
+
+            if (repathTimer >= repathInterval)
+            {
+                path = GridAStar.Instance.FindPath(transform.position, player.position);
+                blackboard.Set("path", path);
+                blackboard.Set("playerPosition", player.position);
+                blackboard.Set("pathIndex", 0);
+                repathTimer = 0f;
+                ClearPathOrbs();
+
+                if (enemyData.showDottedPath && path != null)
+                {
+                    foreach (Vector3 pos in path)
+                    {
+                        GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
+                        orb.transform.localScale *= 3f;
+                        orb.GetComponent<SpriteRenderer>().color = Color.black;
+                        pathOrbs.Add(orb);
+                    }
+                }
+            }
+
+            FollowPath();
+            int pathIdx = blackboard.Get<int>("pathIndex");
+            if (path != null && !CheckPlayerInPoissonDisc() && pathIdx >= path.Count)
+            {
+                blackboard.Set("chasingPlayer", false);
+                path = null;
+                ClearPathOrbs();
+            }
+        }
+        else if (!heardSound)
+        {
+            Patrol();
+        }
+    }
+
+    void UpdateIconDisplay(bool isChasing, bool heardSound)
+    {
+        bool showSuspicious = (blackboard.Get<bool>("suspicious") || heardSound) && !isChasing;
+
+        if (isChasing)
+        {
+            TryShowIcon(alertPrefab);
+        }
+        else if (showSuspicious && suspiciousTimer > 0)
+        {
+            TryShowIcon(suspiciousPrefab);
+        }
+        else
+        {
+            HideIcon();
+        }
+    }
+
+    void TryShowIcon(GameObject prefab)
+    {
+        if (currentIcon != null && currentIcon.name.StartsWith(prefab.name))
+            return;
+
+        HideIcon();
+        if (prefab == null) return;
+
+        currentIcon = Instantiate(prefab, transform);
+        currentIcon.name = prefab.name + "(Clone)";
+        currentIcon.transform.localPosition = Vector3.up * 1.5f;
+
+        var renderer = currentIcon.GetComponent<SpriteRenderer>();
+        if (renderer != null) renderer.sortingOrder = 100;
+    }
+
+    void HideIcon()
+    {
+        if (currentIcon != null)
+        {
+            Destroy(currentIcon);
+            currentIcon = null;
+        }
+    }
+
 }

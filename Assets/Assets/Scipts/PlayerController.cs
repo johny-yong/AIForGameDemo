@@ -12,11 +12,14 @@ public class PlayerController : MonoBehaviour
     public GameObject bullet;
     private Rigidbody2D rb;                      
     private Vector2 movement;                    
-
+    private SoundEmitter emitter;
+    private GeneralEnemyData enemyData;
     // Start is called before the first frame update
     void Start()
     {
+        enemyData = GameObject.FindGameObjectWithTag("EnemyDataController").GetComponent<GeneralEnemyData>();
         rb = GetComponent<Rigidbody2D>();
+        emitter = GetComponent<SoundEmitter>();
     }
 
     // Update is called once per frame
@@ -35,6 +38,13 @@ public class PlayerController : MonoBehaviour
 
             GameObject obj = Instantiate(bullet, transform.position, Quaternion.identity);
             obj.GetComponent<Bullet>().dir = direction;
+
+        if (movement.sqrMagnitude > 0.001f)
+        {
+           if (enemyData.canHearSound)
+            {
+                emitter.EmitSound();
+            }
         }
     }
 

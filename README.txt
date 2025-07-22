@@ -5,5 +5,6 @@ Demo Purpose:
 F1 - Enemy is Omniscient
 F2 - Enemy find player by view cone
 F3 - Enemy find player by Poisson Disc
-
-F12 - Toggle visibility of dotted line to player // Aka the path to the player
+F4 - Enemy find player by circle radius
+F5 - Toggle visibility of dotted line to player //Aka the path to player
+F6 - Toggle if enemy could hear sound

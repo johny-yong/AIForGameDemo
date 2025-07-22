@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class GeneralEnemyData : MonoBehaviour
@@ -9,18 +10,23 @@ public class GeneralEnemyData : MonoBehaviour
     {
         OmniScient,
         ViewCone,
-        PoissonDisc
+        PoissonDisc,
+        CircularRadius
     }
 
     public AwarenessMode currentAwareness;
     public TextMeshProUGUI displayText;
     public TextMeshProUGUI dottedPathText;
+    public TextMeshProUGUI hearingText;
 
     public bool showDottedPath = true;
+
+    public bool canHearSound = true;
     private void Start()
     {
         displayText.text = UpdateAwarenessText(currentAwareness);
         dottedPathText.text = UpdatePathText(showDottedPath);
+        hearingText.text = UpdateHearingText(canHearSound);
     }
 
     // Update is called once per frame
@@ -44,8 +50,19 @@ public class GeneralEnemyData : MonoBehaviour
         }
         else if (Input.GetKeyUp(KeyCode.F4))
         {
+            currentAwareness = AwarenessMode.CircularRadius;
+            displayText.text = UpdateAwarenessText(currentAwareness);
+        }
+        else if (Input.GetKeyUp(KeyCode.F5))
+        {
             showDottedPath = !showDottedPath;
             dottedPathText.text = UpdatePathText(showDottedPath);
+        }
+
+        else if (Input.GetKeyUp(KeyCode.F6))
+        {
+            canHearSound = !canHearSound;
+            hearingText.text = UpdateHearingText(canHearSound);
         }
 
     }
@@ -59,6 +76,8 @@ public class GeneralEnemyData : MonoBehaviour
                 return "Enemy checking mode: Viewcone";
         case AwarenessMode.PoissonDisc:
                 return "Enemy checking mode: PoissonDisc";
+        case AwarenessMode.CircularRadius:
+                return "Enemy checking mode: Radius";
         }
 
         return "Enemy checking mode:";
@@ -73,6 +92,18 @@ public class GeneralEnemyData : MonoBehaviour
         else
         {
             return "Path Visual: False";
+        }
+    }
+
+    string UpdateHearingText(bool hear)
+    {
+        if (hear)
+        {
+            return "Can Hear: True";
+        }
+        else
+        {
+            return "Can Hear: False";
         }
     }
 }
