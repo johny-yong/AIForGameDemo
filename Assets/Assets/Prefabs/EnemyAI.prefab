@@ -724,6 +724,9 @@ MonoBehaviour:
   enemyMask:
     serializedVersion: 2
     m_Bits: 256
+  healthPackMask:
+    serializedVersion: 2
+    m_Bits: 512
   viewCone: {fileID: 1107389539360952483}
   circularVision: {fileID: 5785030483706765801}
   normalSampleCount: 50

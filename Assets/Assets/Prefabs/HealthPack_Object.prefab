@@ -45,9 +45,9 @@ GameObject:
   - component: {fileID: 3341662694862147888}
   - component: {fileID: 1978622349642277315}
   - component: {fileID: 8993936003315918173}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: HealthPack
-  m_TagString: Untagged
+  m_TagString: HealthPack
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0

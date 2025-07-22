@@ -25,6 +25,7 @@ public class WaypointEnemyAI : MonoBehaviour
     public LayerMask obstacleMask;
     public LayerMask playerMask;
     public LayerMask enemyMask;
+    public LayerMask healthPackMask;
     public ViewConeRenderer viewCone;
 
     [Header("Vision Circle Settings")]
@@ -77,12 +78,19 @@ public class WaypointEnemyAI : MonoBehaviour
                 isChasing = blackboard.Has("viewConePlayerSeen") && blackboard.Get<bool>("viewConePlayerSeen");
                 break;
             case AwarenessMode.PoissonDisc:
-                canSeePlayerDirectly = CheckPlayerInPoissonDisc();              //Direct Line of Sight of player
-                isChasing = SharingChasingIntelBetweenEnemies(canSeePlayerDirectly);   //Sharing Chasing intel with other enemies 
+                canSeePlayerDirectly = CheckPlayerInPoissonDisc();                     //Direct Line of Sight of player
+                isChasing = HandlePoissonDiscBehavior(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
                 break;
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
                 break;
+        }
+
+        //Chasing Healthpack logic
+        bool seekingHealthPack = blackboard.Has("seekingHealthPack") && blackboard.Get<bool>("seekingHealthPack");
+        if (seekingHealthPack && HandleHealthPackMovement())
+        {
+            return; // Skip normal behavior while seeking health pack
         }
 
         blackboard.Set("chasingPlayer", isChasing);
@@ -151,10 +159,87 @@ public class WaypointEnemyAI : MonoBehaviour
         }
     }
 
-    bool SharingChasingIntelBetweenEnemies(bool canSeePlayerDirectly) {
+    
+    bool HandleHealthPackMovement()
+    {
+        GameObject targetHealthPack = blackboard.Get<GameObject>("targetHealthPack");
+
+        // Check if health pack still exists
+        if (targetHealthPack == null)
+        {
+            // Health pack was destroyed/picked up by someone else, stop seeking
+            blackboard.Set("seekingHealthPack", false);
+            path = null;
+            ClearPathOrbs();
+            return false; // Return to normal behavior
+        }
+
+        // Handle pathfinding to health pack
+        repathTimer += Time.deltaTime;
+
+        if (repathTimer >= repathInterval)
+        {
+            path = GridAStar.Instance.FindPath(transform.position, targetHealthPack.transform.position);
+            blackboard.Set("path", path);
+            blackboard.Set("pathIndex", 0);
+            repathTimer = 0f;
+            ClearPathOrbs();
+
+            // Visualize health pack path with green orbs
+            if (enemyData.showDottedPath && path != null)
+            {
+                foreach (Vector3 pos in path)
+                {
+                    GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
+                    orb.transform.localScale *= 3f;
+                    orb.GetComponent<SpriteRenderer>().color = Color.green; // Green for health pack path
+                    pathOrbs.Add(orb);
+                }
+            }
+        }
+
+        FollowPath();
+
+        // Check if we reached the health pack area
+        if (Vector3.Distance(transform.position, targetHealthPack.transform.position) <= reachDistance * 2f)
+        {
+            // Health pack should be automatically picked up by the HealthPack script when we get close
+            blackboard.Set("seekingHealthPack", false);
+            path = null;
+            ClearPathOrbs();
+            return false; // Return to normal behavior after reaching health pack
+        }
+
+        return true; // Continue seeking health pack
+    }
+
+    //HealthPack or Chase Player
+    bool HandlePoissonDiscBehavior(bool canSeePlayerDirectly)
+    {
+        EnemyStats enemyStats = GetComponent<EnemyStats>();
+        bool needsHealth = enemyStats.currentHealth < enemyStats.maxHealth;
+
+        // Get both detections in one pass
+        var (detectedEnemy, detectedHealthPack) = GetDetectedObjects();
+
+        // If we found a health pack and need health, prioritize it
+        if (detectedHealthPack != null && needsHealth)
+        {
+            blackboard.Set("targetHealthPack", detectedHealthPack);
+            blackboard.Set("seekingHealthPack", true);
+            return false;
+        }
+        else
+        {
+            blackboard.Set("seekingHealthPack", false);
+            return SharingChasingIntelBetweenEnemies(canSeePlayerDirectly, detectedEnemy);
+        }
+    }
+
+    bool SharingChasingIntelBetweenEnemies(bool canSeePlayerDirectly, GameObject detectedEnemy) {
 
         // Always check if we can see another enemy and share intel
-        GameObject detectedEnemy = GetDetectedEnemy();
+        
         if (detectedEnemy != null)
         {
             Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
@@ -303,49 +388,66 @@ public class WaypointEnemyAI : MonoBehaviour
         return false;
     }
 
-    //Function to detect enemies
-    GameObject GetDetectedEnemy()
+    //Even more efficient: detect both enemies and health packs in one pass
+    (GameObject detectedEnemy, GameObject detectedHealthPack) GetDetectedObjects()
     {
         bool isSuspicious = blackboard.Has("suspicious") && blackboard.Get<bool>("suspicious");
         bool isChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
         int currentSampleCount = isSuspicious || isChasing ? alertSampleCount : normalSampleCount;
 
         var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
-        GameObject detectedEnemy = CheckSamplesForEnemyObject(frontSamples, 1.0f);
-        if (detectedEnemy != null)
+        var (frontEnemy, frontHealthPack) = CheckSamplesForBothObjects(frontSamples, 1.0f);
+
+        if (frontEnemy != null || frontHealthPack != null)
         {
-            //Debug.Log($"{name} detected enemy {detectedEnemy.name} in FRONT Poisson disc sampling with {frontSamples.Count} samples");
-            return detectedEnemy;
+            return (frontEnemy, frontHealthPack);
         }
 
         int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
         var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
-        detectedEnemy = CheckSamplesForEnemyObject(backSamples, 0.5f);
-        if (detectedEnemy != null)
-        {
-            //Debug.Log($"{name} detected enemy {detectedEnemy.name} in BACK Poisson disc sampling with {backSamples.Count} samples");
-            return detectedEnemy;
+        var (backEnemy, backHealthPack) = CheckSamplesForBothObjects(backSamples, 0.5f);
 
-        }
-
-        return null;
+        return (backEnemy, backHealthPack);
     }
 
-    //Function to check Poisson Disk samples for enemy objects
-    GameObject CheckSamplesForEnemyObject(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
+    //Check for both enemies and health packs in a single loop
+    (GameObject enemy, GameObject healthPack) CheckSamplesForBothObjects(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
     {
+        GameObject detectedEnemy = null;
+        GameObject detectedHealthPack = null;
+
         foreach (var s in samples)
         {
             Vector3 worldSample = transform.position + s.direction * s.radius;
-            RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
 
-            if (hit.collider != null && hit.transform.CompareTag("Enemy"))
+            // Check for enemy
+            if (detectedEnemy == null)
             {
-                //Debug.Log($"Detected Enemy");
-                return hit.transform.gameObject;
+                RaycastHit2D enemyHit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
+                if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy"))
+                {
+                    detectedEnemy = enemyHit.transform.gameObject;
+                }
+            }
+
+            // Check for health pack
+            if (detectedHealthPack == null)
+            {
+                RaycastHit2D healthHit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | healthPackMask);
+                if (healthHit.collider != null && healthHit.transform.CompareTag("HealthPack"))
+                {
+                    detectedHealthPack = healthHit.transform.gameObject;
+                }
+            }
+
+            // Early exit if we found both
+            if (detectedEnemy != null && detectedHealthPack != null)
+            {
+                break;
             }
         }
-        return null;
+
+        return (detectedEnemy, detectedHealthPack);
     }
 
 
