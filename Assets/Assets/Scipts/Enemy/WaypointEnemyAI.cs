@@ -1,9 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.XR;
 using static GeneralEnemyData;
 
-public class WaypointEnemyAI : MonoBehaviour
+public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 {
     [Header("Patrol Settings")]
     public Transform[] waypoints;
@@ -52,20 +53,65 @@ public class WaypointEnemyAI : MonoBehaviour
     public GameObject pathOrbPrefab;
     private List<GameObject> pathOrbs = new List<GameObject>();
 
+    #region SoundReceiver
+    private Vector3 lastHeardPosition = Vector3.positiveInfinity;
+
+    void OnEnable() => SoundDetectionManager.RegisterListener(this);
+    void OnDisable() => SoundDetectionManager.UnregisterListener(this);
+
+    public void OnHearSound(SoundEvent e, float effectiveVolume)
+    {
+        if (!blackboard.Get<bool>("canHear")) return;
+
+        //Calculate importance based on type and volume
+        float importance = effectiveVolume;
+        if (e.type == SoundType.Footstep) importance *= 1.5f;
+
+        //Only react if sound is important enough
+        if (importance > confidenceThreshold)
+        {
+            blackboard.Set("heardSound", true);
+            blackboard.Set("heardPosition", e.sourcePosition);
+            blackboard.Set("heardType", e.type.ToString());
+            blackboard.Set("heardVolume", effectiveVolume);
+            blackboard.Set("heardFrequency", e.frequency);
+            blackboard.Set("heardIsDirect", e.isDirect);
+
+            //If sound is muffled, move more cautiously
+            float speedModifier = e.isDirect ? 1f : 0.7f;
+            blackboard.Set("investigationSpeed", moveSpeed * speedModifier);
+            Debug.Log(gameObject.name + " heard something....");
+        }
+    }
+
+    public Vector3 GetPosition() => transform.position;
+    #endregion
+
+    [SerializeField] private GameObject suspiciousPrefab;
+    [SerializeField] private GameObject alertPrefab;
+
+    private GameObject currentIcon;
+    private Coroutine iconRoutine;
+
+    private float suspiciousTimer = 0f;
+    public float suspiciousCooldown = 2f; // seconds
+
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player").transform;
-        blackboard = GetComponent<Blackboard>();
-        if (blackboard == null) blackboard = gameObject.AddComponent<Blackboard>();
+        blackboard = GetComponent<Blackboard>() ?? gameObject.AddComponent<Blackboard>();
         enemyData = GameObject.FindGameObjectWithTag("EnemyDataController").GetComponent<GeneralEnemyData>();
 
         blackboard.Set("pathIndex", 0);
+        blackboard.Set("canHear", enemyData.canHearSound);
+        SoundDetectionManager.occlusionMask = LayerMask.GetMask("Wall");
 
         // Initialize health pack memory storage
         if (!blackboard.Has("knownHealthPacks"))
         {
             blackboard.Set("knownHealthPacks", new Dictionary<GameObject, float>());
         }
+
     }
 
     void Update()
@@ -74,100 +120,32 @@ public class WaypointEnemyAI : MonoBehaviour
 
         viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
         circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
+        blackboard.Set("canHear", enemyData.canHearSound);
 
         //Always detect health packs and enemies regardless of current state
         DetectAndShareObjects();
 
-        bool isChasing = false;
-        bool canSeePlayerDirectly = false;
+        bool isChasing = UpdateChasingState();
+        blackboard.Set("chasingPlayer", isChasing);
 
-        switch (enemyData.currentAwareness)
-        {
-            case AwarenessMode.OmniScient:
-                isChasing = true;
-                break;
-            case AwarenessMode.ViewCone:
-                isChasing = blackboard.Has("viewConePlayerSeen") && blackboard.Get<bool>("viewConePlayerSeen");
-                break;
-            case AwarenessMode.PoissonDisc:
-                canSeePlayerDirectly = CheckPlayerInPoissonDisc();                     //Direct Line of Sight of player
-                isChasing = HandlePoissonDiscBehaviorSimplified(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
-                break;
-            case AwarenessMode.CircularRadius:
-                isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
-                break;
-        }
+        bool heardSound = ProcessHearing(isChasing);
+
 
         //Chasing Healthpack logic
         bool seekingHealthPack = blackboard.Has("seekingHealthPack") && blackboard.Get<bool>("seekingHealthPack");
-        if (seekingHealthPack && HandleHealthPackMovement())
+        if (seekingHealthPack && HandleHealthPackMovement())  return;// Skip normal behavior while seeking health pack
+
+        ProcessMovement(isChasing, heardSound);
+        UpdateIconDisplay(isChasing, heardSound);
+
+        if (suspiciousTimer > 0f)
         {
-            return; // Skip normal behavior while seeking health pack
-        }
-
-        blackboard.Set("chasingPlayer", isChasing);
-
-        if (blackboard.Get<bool>("chasingPlayer"))
-        {
-            repathTimer += Time.deltaTime;
-
-            if (repathTimer >= repathInterval)
-            {
-                Vector3 targetPosition = player.position;
-
-                // If we can't see player directly but have last known position, use that
-                if (!canSeePlayerDirectly && blackboard.Has("lastKnownPlayerPosition"))
-                {
-                    targetPosition = blackboard.Get<Vector3>("lastKnownPlayerPosition");
-                }
-
-
-                path = GridAStar.Instance.FindPath(transform.position, targetPosition);
-                blackboard.Set("path", path);
-                blackboard.Set("playerPosition", targetPosition);
-                blackboard.Set("pathIndex", 0);
-                repathTimer = 0f;
-                ClearPathOrbs();
-
-                if (enemyData.showDottedPath && path != null)
-                {
-                    foreach (Vector3 pos in path)
-                    {
-                        GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
-                        orb.transform.localScale *= 3f;
-                        orb.GetComponent<SpriteRenderer>().color = Color.red; // Red for last known position
-                        pathOrbs.Add(orb);
-                    }
-                }
-            }
-
-            FollowPath();
-            int pathIdx = blackboard.Get<int>("pathIndex");
-
-            //Timer for the enemy to return to patrol if reached the last known position
-            if (path != null && pathIdx >= path.Count)
-            {
-                if (blackboard.Has("lastKnownPlayerTime"))
-                {
-                    float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
-                    if (Time.time - lastSeenTime >= lastKnownPositionTimeout)
-                    {
-                        blackboard.Set("chasingPlayer", false);
-                        path = null;
-                        ClearPathOrbs();
-                    }
-                }
-                else
-                {
-                    blackboard.Set("chasingPlayer", false);
-                    path = null;
-                    ClearPathOrbs();
-                }
-            }
+            suspiciousTimer -= Time.deltaTime;
+            blackboard.Set("suspicious", true);
         }
         else
         {
-            Patrol();
+            blackboard.Set("suspicious", false);
         }
 
         // Clean up expired health pack memories
@@ -542,37 +520,55 @@ public class WaypointEnemyAI : MonoBehaviour
 
     bool CheckPlayerInPoissonDisc()
     {
-        bool isSuspicious = blackboard.Has("suspicious") && blackboard.Get<bool>("suspicious");
-        bool isChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+        bool isSuspicious = false;
+        bool isAlerted = false;
 
-        int currentSampleCount = isSuspicious || isChasing ? alertSampleCount : normalSampleCount;
+        bool alreadyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+        int currentSampleCount = alreadyChasing ? alertSampleCount : normalSampleCount;
 
         var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
-        if (CheckSamplesForPlayer(frontSamples, 1.0f)) return true;
+        if (ProcessSamples(frontSamples, 1.0f, out isSuspicious, out isAlerted)) return true;
 
         int backSampleCount = Mathf.FloorToInt(currentSampleCount * 0.5f);
         var backSamples = PoissonDiscSampler.Generate(-transform.up, backViewAngle, backViewDistance, backSampleCount);
-        if (CheckSamplesForPlayer(backSamples, 0.5f)) return true;
+        if (ProcessSamples(backSamples, 0.5f, out isSuspicious, out isAlerted)) return true;
 
+        blackboard.Set("suspicious", false);
         return false;
     }
 
-    bool CheckSamplesForPlayer(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
+    bool ProcessSamples(List<PoissonDiscSampler.Sample> samples, float maxConfidence, out bool suspicious, out bool confirmed)
     {
+        suspicious = false;
+        confirmed = false;
+
         foreach (var s in samples)
         {
             float confidence = Mathf.Min(s.confidence, maxConfidence);
-            if (confidence < confidenceThreshold) continue;
+            if (confidence < confidenceThreshold * 0.5f) continue;
 
             Vector3 worldSample = transform.position + s.direction * s.radius;
             RaycastHit2D hit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | playerMask);
 
             if (hit.collider != null && hit.transform == player)
             {
-                //Debug.Log($"Player hit at confidence {confidence}");
-                return true;
+                if (confidence >= confidenceThreshold)
+                {
+                    confirmed = true;
+                    blackboard.Set("suspicious", false);
+                    return true;// Fully confirmed sighting
+                }
+                else
+                {
+                    suspicious = true;
+                    blackboard.Set("suspicious", true);
+                    suspiciousTimer = suspiciousCooldown;
+                    return false;
+                }
             }
         }
+
+        blackboard.Set("suspicious", false);
         return false;
     }
 
@@ -645,4 +641,144 @@ public class WaypointEnemyAI : MonoBehaviour
             if (orb) Destroy(orb);
         pathOrbs.Clear();
     }
+    bool UpdateChasingState()
+    {
+        switch (enemyData.currentAwareness)
+        {
+            case AwarenessMode.OmniScient:
+                return true;
+            case AwarenessMode.ViewCone:
+                return blackboard.Get<bool>("viewConePlayerSeen");
+            case AwarenessMode.PoissonDisc:
+                bool canSeePlayerDirectly = CheckPlayerInPoissonDisc();             //Direct Line of Sight of player
+                return HandlePoissonDiscBehaviorSimplified(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
+            case AwarenessMode.CircularRadius:
+                return blackboard.Get<bool>("circlePlayerSeen");
+            default:
+                return false;
+        }
+
+        
+    }
+
+
+    bool ProcessHearing(bool isChasing)
+    {
+        bool heardSound = enemyData.canHearSound && blackboard.Get<bool>("heardSound");
+
+        if (heardSound && !isChasing)
+        {
+            Vector3 soundPos = blackboard.Get<Vector3>("heardPosition");
+            blackboard.Set("suspicious", true);
+            suspiciousTimer = suspiciousCooldown;
+
+            repathTimer += Time.deltaTime;
+            if (repathTimer >= repathInterval)
+            {
+                path = GridAStar.Instance.FindPath(transform.position, soundPos);
+                blackboard.Set("path", path);
+                blackboard.Set("pathIndex", 0);
+                repathTimer = 0f;
+                ClearPathOrbs();
+            }
+
+            FollowPath();
+
+            int pathIdx = blackboard.Get<int>("pathIndex");
+            if (path != null && pathIdx >= path.Count)
+            {
+                blackboard.Set("heardSound", false);
+                path = null;
+                ClearPathOrbs();
+            }
+        }
+
+        return heardSound;
+    }
+
+    void ProcessMovement(bool isChasing, bool heardSound)
+    {
+        if (isChasing)
+        {
+            repathTimer += Time.deltaTime;
+
+            if (repathTimer >= repathInterval)
+            {
+                path = GridAStar.Instance.FindPath(transform.position, player.position);
+                blackboard.Set("path", path);
+                blackboard.Set("playerPosition", player.position);
+                blackboard.Set("pathIndex", 0);
+                repathTimer = 0f;
+                ClearPathOrbs();
+
+                if (enemyData.showDottedPath && path != null)
+                {
+                    foreach (Vector3 pos in path)
+                    {
+                        GameObject orb = Instantiate(pathOrbPrefab, pos, Quaternion.identity);
+                        orb.transform.localScale *= 3f;
+                        orb.GetComponent<SpriteRenderer>().color = Color.black;
+                        pathOrbs.Add(orb);
+                    }
+                }
+            }
+
+            FollowPath();
+            int pathIdx = blackboard.Get<int>("pathIndex");
+            if (path != null && !CheckPlayerInPoissonDisc() && pathIdx >= path.Count)
+            {
+                blackboard.Set("chasingPlayer", false);
+                path = null;
+                ClearPathOrbs();
+            }
+        }
+        else if (!heardSound)
+        {
+            Patrol();
+        }
+    }
+
+    void UpdateIconDisplay(bool isChasing, bool heardSound)
+    {
+        bool showSuspicious = (blackboard.Get<bool>("suspicious") || heardSound) && !isChasing;
+
+        if (isChasing)
+        {
+            TryShowIcon(alertPrefab);
+        }
+        else if (showSuspicious && suspiciousTimer > 0)
+        {
+            TryShowIcon(suspiciousPrefab);
+        }
+        else
+        {
+            HideIcon();
+        }
+    }
+
+    void TryShowIcon(GameObject prefab)
+    {
+        if (currentIcon != null && currentIcon.name.StartsWith(prefab.name))
+            return;
+
+        HideIcon();
+        if (prefab == null) return;
+
+        currentIcon = Instantiate(prefab, transform);
+        currentIcon.name = prefab.name + "(Clone)";
+        currentIcon.transform.localPosition = Vector3.up * 1.5f;
+
+        var renderer = currentIcon.GetComponent<SpriteRenderer>();
+        if (renderer != null) renderer.sortingOrder = 100;
+    }
+
+    void HideIcon()
+    {
+        if (currentIcon != null)
+        {
+            Destroy(currentIcon);
+            currentIcon = null;
+        }
+    }
+
 }

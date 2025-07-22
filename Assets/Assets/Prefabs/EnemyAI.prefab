@@ -679,7 +679,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_Sprite: {fileID: 21300000, guid: ac4bc3decbfcf02439b8590f9bf725e2, type: 3}
   m_Color: {r: 0.5622641, g: 0.049861126, b: 0.049861126, a: 1}
   m_FlipX: 0
@@ -752,6 +752,8 @@ MonoBehaviour:
   maxHealth: 100
   currentHealth: 0
   healthText: {fileID: 5579442245400499360}
+  suspiciousPrefab: {fileID: 6543135843185577307, guid: fbff01d43aacdc446bff9451ecadb0aa, type: 3}
+  alertPrefab: {fileID: 4534507172888472804, guid: 2b7864290bc03084cac8357068580220, type: 3}
 --- !u!58 &1841268694706130159
 CircleCollider2D:
   m_ObjectHideFlags: 0
