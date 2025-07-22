@@ -44,6 +44,9 @@ public class WaypointEnemyAI : MonoBehaviour
     [Header("Last Known Position")]
     public float lastKnownPositionTimeout = 10f; // How long to remember last known position
 
+    [Header("Health Pack Sharing")]
+    public float healthPackMemoryTimeout = 15f; // How long to remember health pack locations
+
     private Blackboard blackboard;
 
     public GameObject pathOrbPrefab;
@@ -57,6 +60,12 @@ public class WaypointEnemyAI : MonoBehaviour
         enemyData = GameObject.FindGameObjectWithTag("EnemyDataController").GetComponent<GeneralEnemyData>();
 
         blackboard.Set("pathIndex", 0);
+
+        // Initialize health pack memory storage
+        if (!blackboard.Has("knownHealthPacks"))
+        {
+            blackboard.Set("knownHealthPacks", new Dictionary<GameObject, float>());
+        }
     }
 
     void Update()
@@ -65,6 +74,9 @@ public class WaypointEnemyAI : MonoBehaviour
 
         viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
         circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
+
+        //Always detect health packs and enemies regardless of current state
+        DetectAndShareObjects();
 
         bool isChasing = false;
         bool canSeePlayerDirectly = false;
@@ -79,7 +91,7 @@ public class WaypointEnemyAI : MonoBehaviour
                 break;
             case AwarenessMode.PoissonDisc:
                 canSeePlayerDirectly = CheckPlayerInPoissonDisc();                     //Direct Line of Sight of player
-                isChasing = HandlePoissonDiscBehavior(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
+                isChasing = HandlePoissonDiscBehaviorSimplified(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
                 break;
             case AwarenessMode.CircularRadius:
                 isChasing = blackboard.Has("circlePlayerSeen") && blackboard.Get<bool>("circlePlayerSeen");
@@ -157,9 +169,35 @@ public class WaypointEnemyAI : MonoBehaviour
         {
             Patrol();
         }
+
+        // Clean up expired health pack memories
+        CleanupExpiredHealthPackMemories();
     }
 
-    
+    void DetectAndShareObjects()
+    {
+        if (enemyData.currentAwareness != AwarenessMode.PoissonDisc) return;
+
+        var (detectedEnemy, detectedHealthPack) = GetDetectedObjects();
+
+        // Always store detected health pack
+        if (detectedHealthPack != null)
+        {
+            StoreHealthPackInMemory(detectedHealthPack);
+        }
+
+        // Share intel with detected enemy
+        if (detectedEnemy != null)
+        {
+            Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
+            if (enemyBlackboard != null)
+            {
+                ShareHealthPackIntel(enemyBlackboard);
+            }
+        }
+    }
+
+
     bool HandleHealthPackMovement()
     {
         GameObject targetHealthPack = blackboard.Get<GameObject>("targetHealthPack");
@@ -171,6 +209,9 @@ public class WaypointEnemyAI : MonoBehaviour
             blackboard.Set("seekingHealthPack", false);
             path = null;
             ClearPathOrbs();
+
+            // Remove from memory if it was destroyed
+            RemoveHealthPackFromMemory(targetHealthPack);
             return false; // Return to normal behavior
         }
 
@@ -207,6 +248,9 @@ public class WaypointEnemyAI : MonoBehaviour
             blackboard.Set("seekingHealthPack", false);
             path = null;
             ClearPathOrbs();
+
+            // Remove from memory since we picked it up
+            RemoveHealthPackFromMemory(targetHealthPack);
             return false; // Return to normal behavior after reaching health pack
         }
 
@@ -214,32 +258,46 @@ public class WaypointEnemyAI : MonoBehaviour
     }
 
     //HealthPack or Chase Player
-    bool HandlePoissonDiscBehavior(bool canSeePlayerDirectly)
+    bool HandlePoissonDiscBehaviorSimplified(bool canSeePlayerDirectly)
     {
         EnemyStats enemyStats = GetComponent<EnemyStats>();
         bool needsHealth = enemyStats.currentHealth < enemyStats.maxHealth;
 
-        // Get both detections in one pass
-        var (detectedEnemy, detectedHealthPack) = GetDetectedObjects();
+        // If we need health, try to find a health pack from memory
+        if (needsHealth)
+        {
+            GameObject targetHealthPack = FindBestHealthPack(null); // Check memory only
+            if (targetHealthPack != null)
+            {
+                blackboard.Set("targetHealthPack", targetHealthPack);
+                blackboard.Set("seekingHealthPack", true);
+                return false;
+            }
+        }
 
-        // If we found a health pack and need health, prioritize it
-        if (detectedHealthPack != null && needsHealth)
+        blackboard.Set("seekingHealthPack", false);
+
+        // Determine chasing behavior based on direct sight or recent intel
+        if (canSeePlayerDirectly)
         {
-            blackboard.Set("targetHealthPack", detectedHealthPack);
-            blackboard.Set("seekingHealthPack", true);
-            return false;
+            blackboard.Set("lastKnownPlayerPosition", player.position);
+            blackboard.Set("lastKnownPlayerTime", Time.time);
+            return true;
         }
-        else
+
+        if (blackboard.Has("lastKnownPlayerTime"))
         {
-            blackboard.Set("seekingHealthPack", false);
-            return SharingChasingIntelBetweenEnemies(canSeePlayerDirectly, detectedEnemy);
+            float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
+            float timeSinceLastSeen = Time.time - lastSeenTime;
+            return timeSinceLastSeen < lastKnownPositionTimeout;
         }
+
+        return false;
     }
 
-    bool SharingChasingIntelBetweenEnemies(bool canSeePlayerDirectly, GameObject detectedEnemy) {
-
+    bool SharingIntelBetweenEnemies(bool canSeePlayerDirectly, GameObject detectedEnemy)
+    {
         // Always check if we can see another enemy and share intel
-        
         if (detectedEnemy != null)
         {
             Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
@@ -248,25 +306,11 @@ public class WaypointEnemyAI : MonoBehaviour
                 bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
                 bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
 
-                // Determine who has the most recent intel
-                float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
-                float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
+                // Share player intel
+                SharePlayerIntel(enemyBlackboard, thisEnemyChasing, otherEnemyChasing);
 
-                // Share intel if either enemy is chasing and has more recent information
-                if (thisEnemyChasing && thisLastSeen > otherLastSeen)
-                {
-                    // This enemy shares intel to other enemy
-                    enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
-                    enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
-                    Debug.Log($"{name} shared intel with {detectedEnemy.name}");
-                }
-                else if (otherEnemyChasing && otherLastSeen > thisLastSeen)
-                {
-                    // Other enemy shares intel to this enemy
-                    blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
-                    blackboard.Set("lastKnownPlayerTime", otherLastSeen);
-                    Debug.Log($"{detectedEnemy.name} shared intel with {name}");
-                }
+                // Share health pack intel
+                ShareHealthPackIntel(enemyBlackboard);
             }
         }
 
@@ -287,7 +331,151 @@ public class WaypointEnemyAI : MonoBehaviour
         }
 
         return false; // No recent intel, don't chase
+    }
 
+    void SharePlayerIntel(Blackboard enemyBlackboard, bool thisEnemyChasing, bool otherEnemyChasing)
+    {
+        // Determine who has the most recent intel
+        float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
+        float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
+
+        // Share intel if either enemy is chasing and has more recent information
+        if (thisEnemyChasing && thisLastSeen > otherLastSeen)
+        {
+            // This enemy shares intel to other enemy
+            enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
+            enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
+            Debug.Log($"{name} shared player intel with {enemyBlackboard.gameObject.name}");
+        }
+        else if (otherEnemyChasing && otherLastSeen > thisLastSeen)
+        {
+            // Other enemy shares intel to this enemy
+            blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
+            blackboard.Set("lastKnownPlayerTime", otherLastSeen);
+            Debug.Log($"{enemyBlackboard.gameObject.name} shared player intel with {name}");
+        }
+    }
+
+    void ShareHealthPackIntel(Blackboard enemyBlackboard)
+    {
+        // Get both enemies' health pack memories
+        var thisHealthPacks = blackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+
+        if (!enemyBlackboard.Has("knownHealthPacks"))
+        {
+            enemyBlackboard.Set("knownHealthPacks", new Dictionary<GameObject, float>());
+        }
+        var otherHealthPacks = enemyBlackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+
+        // Share this enemy's health pack knowledge with the other enemy
+        foreach (var kvp in thisHealthPacks)
+        {
+            GameObject healthPack = kvp.Key;
+            float timeDiscovered = kvp.Value;
+
+            // Only share if the health pack still exists and the other enemy doesn't know about it
+            // or if we discovered it more recently
+            if (healthPack != null &&
+                (!otherHealthPacks.ContainsKey(healthPack) || otherHealthPacks[healthPack] < timeDiscovered))
+            {
+                otherHealthPacks[healthPack] = timeDiscovered;
+                Debug.Log($"{name} shared health pack location with {enemyBlackboard.gameObject.name}");
+            }
+        }
+
+        // Share the other enemy's health pack knowledge with this enemy
+        foreach (var kvp in otherHealthPacks)
+        {
+            GameObject healthPack = kvp.Key;
+            float timeDiscovered = kvp.Value;
+
+            // Only accept if the health pack still exists and we don't know about it
+            // or if they discovered it more recently
+            if (healthPack != null &&
+                (!thisHealthPacks.ContainsKey(healthPack) || thisHealthPacks[healthPack] < timeDiscovered))
+            {
+                thisHealthPacks[healthPack] = timeDiscovered;
+                Debug.Log($"{enemyBlackboard.gameObject.name} shared health pack location with {name}");
+            }
+        }
+    }
+
+    void StoreHealthPackInMemory(GameObject healthPack)
+    {
+        if (healthPack == null) return;
+
+        var knownHealthPacks = blackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+        if (!knownHealthPacks.ContainsKey(healthPack))
+        {
+            knownHealthPacks[healthPack] = Time.time;
+            Debug.Log($"{name} discovered health pack at {healthPack.transform.position}");
+        }
+    }
+
+    void RemoveHealthPackFromMemory(GameObject healthPack)
+    {
+        if (healthPack == null) return;
+
+        var knownHealthPacks = blackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+        if (knownHealthPacks.ContainsKey(healthPack))
+        {
+            knownHealthPacks.Remove(healthPack);
+            Debug.Log($"{name} removed health pack from memory");
+        }
+    }
+
+    void CleanupExpiredHealthPackMemories()
+    {
+        var knownHealthPacks = blackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+        var healthPacksToRemove = new List<GameObject>();
+
+        foreach (var kvp in knownHealthPacks)
+        {
+            GameObject healthPack = kvp.Key;
+            float timeDiscovered = kvp.Value;
+
+            // Remove if health pack no longer exists or memory has expired
+            if (healthPack == null || Time.time - timeDiscovered > healthPackMemoryTimeout)
+            {
+                healthPacksToRemove.Add(healthPack);
+            }
+        }
+
+        foreach (var healthPack in healthPacksToRemove)
+        {
+            knownHealthPacks.Remove(healthPack);
+        }
+    }
+
+    GameObject FindBestHealthPack(GameObject directlyDetectedHealthPack)
+    {
+        // If we can see a health pack directly, prioritize it
+        if (directlyDetectedHealthPack != null)
+        {
+            return directlyDetectedHealthPack;
+        }
+
+        // Otherwise, look through our memory for the closest valid health pack
+        var knownHealthPacks = blackboard.Get<Dictionary<GameObject, float>>("knownHealthPacks");
+        GameObject closestHealthPack = null;
+        float closestDistance = float.MaxValue;
+
+        foreach (var kvp in knownHealthPacks)
+        {
+            GameObject healthPack = kvp.Key;
+
+            // Skip if health pack no longer exists
+            if (healthPack == null) continue;
+
+            float distance = Vector3.Distance(transform.position, healthPack.transform.position);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestHealthPack = healthPack;
+            }
+        }
+
+        return closestHealthPack;
     }
 
 
