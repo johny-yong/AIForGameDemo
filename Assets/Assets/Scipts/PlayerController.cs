@@ -38,6 +38,8 @@ public class PlayerController : MonoBehaviour
 
             GameObject obj = Instantiate(bullet, transform.position, Quaternion.identity);
             obj.GetComponent<Bullet>().dir = direction;
+            obj.tag = "Player";
+        }
 
         if (movement.sqrMagnitude > 0.001f)
         {

@@ -762,6 +762,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 8913449033229496997, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1869872494}
+    - targetCorrespondingSourceObject: {fileID: 8913449033229496997, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1869872500}
   m_SourcePrefab: {fileID: 100100000, guid: 9c38f06d52858bf408ea89dd1af3e8e9, type: 3}
 --- !u!114 &1347232108 stripped
 MonoBehaviour:
@@ -1036,6 +1039,21 @@ CircleCollider2D:
   m_Offset: {x: 0, y: 0}
   serializedVersion: 2
   m_Radius: 0.8
+--- !u!114 &1869872500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1869872490}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44ab275afa3103b41865898a8b56c3af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bullet: {fileID: 3550982909097283224, guid: ee21a1b87a75e3d4fb985426eb8f6181, type: 3}
+  bulletSpeed: 20
+  cooldown: 1
 --- !u!1839735485 &1912756489 stripped
 Tilemap:
   m_CorrespondingSourceObject: {fileID: 3943256593533289514, guid: 3cb7308b75a336d48a80f88f1c115a32, type: 3}
