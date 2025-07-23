@@ -93,6 +93,7 @@ public class GeneralEnemyData : MonoBehaviour
         if (!useGaussianRandomness)
         {
             showRayLines = false;
+            UpdateRayLineText(showRayLines);
         }
     }
     string UpdateGaussianText(bool enabled)
