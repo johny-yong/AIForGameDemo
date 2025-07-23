@@ -120,6 +120,8 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 
         viewCone.isVisible = (enemyData.currentAwareness == AwarenessMode.ViewCone);
         circularVision.isVisible = (enemyData.currentAwareness == AwarenessMode.CircularRadius);
+        viewCone.useGaussian = enemyData.useGaussianRandomness;
+        viewCone.showRayLines = enemyData.showRayLines;
         blackboard.Set("canHear", enemyData.canHearSound);
 
         //Always detect health packs and enemies regardless of current state
