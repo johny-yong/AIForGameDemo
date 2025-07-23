@@ -599,6 +599,15 @@ MonoBehaviour:
   alertColor: {r: 1, g: 0, b: 0, a: 0.7}
   isVisible: 1
   blackboard: {fileID: 4959832513265409679}
+  stdDev: 10.3
+  headTurnAmplitude: 15
+  headTurnSpeed: 0.5
+  headTurnGaussianRange: 10
+  headTurnJitterInterval: 2
+  lockHeadWhenAlerted: 1
+  showRayLines: 1
+  rayLineMaterial: {fileID: 2100000, guid: 549fc9ec3c1c53947b37eb332d4f9f1d, type: 2}
+  rayLineWidth: 0.02
 --- !u!1 &8913449033229496997
 GameObject:
   m_ObjectHideFlags: 0
@@ -736,7 +745,11 @@ MonoBehaviour:
   enemyData: {fileID: 0}
   confidenceThreshold: 0.304
   lastKnownPositionTimeout: 10
+  healthPackMemoryTimeout: 15
   pathOrbPrefab: {fileID: 2996963914568071532, guid: 172ea26df91a6a645aaa1f93341fe386, type: 3}
+  suspiciousPrefab: {fileID: 6543135843185577307, guid: fbff01d43aacdc446bff9451ecadb0aa, type: 3}
+  alertPrefab: {fileID: 4534507172888472804, guid: 2b7864290bc03084cac8357068580220, type: 3}
+  suspiciousCooldown: 2
 --- !u!114 &5058669812536487240
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -752,8 +765,6 @@ MonoBehaviour:
   maxHealth: 100
   currentHealth: 0
   healthText: {fileID: 5579442245400499360}
-  suspiciousPrefab: {fileID: 6543135843185577307, guid: fbff01d43aacdc446bff9451ecadb0aa, type: 3}
-  alertPrefab: {fileID: 4534507172888472804, guid: 2b7864290bc03084cac8357068580220, type: 3}
 --- !u!58 &1841268694706130159
 CircleCollider2D:
   m_ObjectHideFlags: 0

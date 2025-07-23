@@ -18,15 +18,24 @@ public class GeneralEnemyData : MonoBehaviour
     public TextMeshProUGUI displayText;
     public TextMeshProUGUI dottedPathText;
     public TextMeshProUGUI hearingText;
+    public TextMeshProUGUI canSeeLines;
+    public TextMeshProUGUI toggleGaussianRandomness;
 
     public bool showDottedPath = true;
-
     public bool canHearSound = true;
+
+    [Header("Gaussian Visibility")]
+    public bool showRayLines = false;
+    public bool useGaussianRandomness = true;
+
     private void Start()
     {
         displayText.text = UpdateAwarenessText(currentAwareness);
         dottedPathText.text = UpdatePathText(showDottedPath);
         hearingText.text = UpdateHearingText(canHearSound);
+        toggleGaussianRandomness.text = UpdateGaussianText(useGaussianRandomness);
+        canSeeLines.text = UpdateRayLineText(showRayLines);
+
     }
 
     // Update is called once per frame
@@ -64,7 +73,35 @@ public class GeneralEnemyData : MonoBehaviour
             canHearSound = !canHearSound;
             hearingText.text = UpdateHearingText(canHearSound);
         }
+        else if (Input.GetKeyUp(KeyCode.F7))
+        {
+            if (currentAwareness == AwarenessMode.ViewCone)
+            {
+                useGaussianRandomness = !useGaussianRandomness;
+                toggleGaussianRandomness.text = UpdateGaussianText(useGaussianRandomness);
+            }
+        }
+        else if (Input.GetKeyUp(KeyCode.F8))
+        {
+            if (useGaussianRandomness)
+            {
+                showRayLines = !showRayLines;
+                canSeeLines.text = UpdateRayLineText(showRayLines);
+            }
+        }
 
+        if (!useGaussianRandomness)
+        {
+            showRayLines = false;
+        }
+    }
+    string UpdateGaussianText(bool enabled)
+    {
+        return $"Gaussian Randomness: {(enabled ? "Enabled" : "Disabled")}";
+    }
+    string UpdateRayLineText(bool show)
+    {
+        return $"Ray Lines Visible: {(show ? "True" : "False")}";
     }
 
     string UpdateAwarenessText(AwarenessMode current)
