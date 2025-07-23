@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class SoundVisualizer : MonoBehaviour
@@ -6,9 +7,11 @@ public class SoundVisualizer : MonoBehaviour
     public static SoundVisualizer Instance;
     public GameObject circlePrefab;
     public float baseDuration = 1f;
+    public float WallConcreteness = 0.5f; //soundproof to hollow (0 - 1)
 
     void Awake()
     {
+        WallConcreteness = 0.5f;
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -30,6 +33,7 @@ public class SoundVisualizer : MonoBehaviour
         // Spawn at world position with no parent and scale 0
         GameObject circle = Instantiate(circlePrefab, new Vector3(position.x, position.y, 0f), Quaternion.identity);
         circle.transform.localScale = Vector3.zero;
+        circle.GetComponent<MeshRenderer>().material = new Material(Shader.Find("Sprites/Default"));
 
         StartCoroutine(GrowAndFade(circle, radius, baseDuration * durationMultiplier, color));
     }
@@ -55,12 +59,15 @@ public class SoundVisualizer : MonoBehaviour
             float rippleGrowth = Mathf.SmoothStep(0f, 1f, t);
             obj.transform.localScale = Vector3.one * (rippleGrowth * scaleFactor);
 
-            float alpha = 1f - t; //Linear fade out
-            sr.color = new Color(fadedColor.r, fadedColor.g, fadedColor.b, fadedColor.a * alpha);
+            //float alpha = 1f - t; //Linear fade out
+            //sr.color = new Color(fadedColor.r, fadedColor.g, fadedColor.b, fadedColor.a * alpha);
 
             elapsed += Time.deltaTime;
+
+            DrawSoundWave(fixedPosition, 5, 360, LayerMask.GetMask("Wall"),ref obj);
             yield return null;
         }
+
 
         Destroy(obj);
     }
@@ -79,5 +86,57 @@ public class SoundVisualizer : MonoBehaviour
         }
     }
 
+    void DrawSoundWave(Vector2 origin, float maxRadius, int resolution, LayerMask obstacleMask, ref GameObject obj)
+    {
+        if (obj == null || !obj.TryGetComponent(out MeshFilter filter))
+        {
+            Debug.LogWarning("MeshFilter missing or obj not assigned.");
+            return;
+        }
+
+        List<Vector3> points = new List<Vector3> { Vector3.zero };
+        List<Vector2> uvs = new List<Vector2>{new Vector2(0.5f, 0.5f)};
+
+        for (int i = 0; i <= resolution; i++)
+        {
+            float angle = (360f / resolution) * i;
+            Vector2 dir = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
+
+            RaycastHit2D hit = Physics2D.Raycast(origin, dir, maxRadius, obstacleMask);
+            float finalRadius = hit.collider != null ? (hit.distance + (maxRadius - hit.distance) * WallConcreteness) : maxRadius;
+
+            Vector2 pointWorld = origin + dir * finalRadius;
+            points.Add(obj.transform.InverseTransformPoint(pointWorld)); // local space
+
+            Vector2 uvCoord = new Vector2((Mathf.Cos(Mathf.Deg2Rad * angle) + 1f) * 0.5f, (Mathf.Sin(Mathf.Deg2Rad * angle) + 1f) * 0.5f);
+            uvs.Add(uvCoord);
+        }
+
+        int[] triangles = new int[resolution * 3];
+        int triIndex = 0;
+
+        for (int i = 1; i < resolution; i++)
+        {
+            triangles[triIndex++] = 0;
+            triangles[triIndex++] = i;
+            triangles[triIndex++] = i + 1;
+        }
+
+        // Close the fan
+        triangles[triIndex++] = 0;
+        triangles[triIndex++] = resolution;
+        triangles[triIndex++] = 1;
+
+        Mesh mesh = new Mesh
+        {
+            vertices = points.ToArray(),
+            triangles = triangles,
+            uv = uvs.ToArray(),
+        };
+
+        mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
+        filter.mesh = mesh;
+    }
 
 }

@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using UnityEngine.Experimental.GlobalIllumination;
 using UnityEngine.XR;
 using static GeneralEnemyData;
 
@@ -10,6 +12,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     public Transform[] waypoints;
     public float moveSpeed = 3f;
     public float reachDistance = 0.1f;
+    public Color waypointColor = Color.black;
 
     [Header("Player Detection")]
     public Transform player;
@@ -788,4 +791,14 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
         }
     }
 
+    void OnDrawGizmos()
+    {
+        if (waypoints == null || waypoints.Length < 2) return;
+
+        Gizmos.color = waypointColor;
+        for (int i = 0; i < waypoints.Length - 1; i++)
+        {
+            Gizmos.DrawLine(waypoints[i].position, waypoints[i + 1].position);
+        }
+    }
 }
