@@ -68,7 +68,10 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 
         //Calculate importance based on type and volume
         float importance = effectiveVolume;
-        if (e.type == SoundType.Footstep) importance *= 1.5f;
+        if (e.type == SoundType.Footstep)
+            importance *= 1.5f;
+        else if (e.type == SoundType.GunShot)
+            importance *= 1.2f;
 
         //Only react if sound is important enough
         if (importance > confidenceThreshold)
@@ -127,21 +130,31 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
         viewCone.showRayLines = enemyData.showRayLines;
         blackboard.Set("canHear", enemyData.canHearSound);
 
+
         //Always detect health packs and enemies regardless of current state
+        bool isChasing = false;
+        bool heardSound =false;
         DetectAndShareObjects();
+        if (blackboard.Has("getLatestPlayerPosition") && blackboard.Get<bool>("getLatestPlayerPosition"))
+        {
+            isChasing = true;
+            ProcessMovement(isChasing, heardSound);
+            UpdateIconDisplay(isChasing, heardSound);
+        }
+        else
+        {
+            isChasing = UpdateChasingState();
+            blackboard.Set("chasingPlayer", isChasing);
 
-        bool isChasing = UpdateChasingState();
-        blackboard.Set("chasingPlayer", isChasing);
+            heardSound = ProcessHearing(isChasing);
 
-        bool heardSound = ProcessHearing(isChasing);
+            //Chasing Healthpack logic
+            bool seekingHealthPack = blackboard.Has("seekingHealthPack") && blackboard.Get<bool>("seekingHealthPack");
+            if (seekingHealthPack && HandleHealthPackMovement()) return;// Skip normal behavior while seeking health pack
 
-
-        //Chasing Healthpack logic
-        bool seekingHealthPack = blackboard.Has("seekingHealthPack") && blackboard.Get<bool>("seekingHealthPack");
-        if (seekingHealthPack && HandleHealthPackMovement())  return;// Skip normal behavior while seeking health pack
-
-        ProcessMovement(isChasing, heardSound);
-        UpdateIconDisplay(isChasing, heardSound);
+            ProcessMovement(isChasing, heardSound);
+            UpdateIconDisplay(isChasing, heardSound);
+        }
 
         if (suspiciousTimer > 0f)
         {
@@ -159,23 +172,28 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 
     void DetectAndShareObjects()
     {
-        if (enemyData.currentAwareness != AwarenessMode.PoissonDisc) return;
-
         var (detectedEnemy, detectedHealthPack) = GetDetectedObjects();
 
         // Always store detected health pack
         if (detectedHealthPack != null)
         {
-            StoreHealthPackInMemory(detectedHealthPack);
+            foreach (var healthpack in detectedHealthPack)
+            {
+                StoreHealthPackInMemory(healthpack);
+            }
         }
 
         // Share intel with detected enemy
         if (detectedEnemy != null)
         {
-            Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
-            if (enemyBlackboard != null)
+            foreach (var enemy in detectedEnemy)
             {
-                ShareHealthPackIntel(enemyBlackboard);
+                Blackboard enemyBlackboard = enemy.GetComponent<Blackboard>();
+                if (enemyBlackboard != null)
+                {
+                    ShareHealthPackIntel(enemyBlackboard);
+                    SharePlayerIntel(enemyBlackboard);
+                }
             }
         }
     }
@@ -241,7 +259,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     }
 
     //HealthPack or Chase Player
-    bool HandlePoissonDiscBehaviorSimplified(bool canSeePlayerDirectly)
+    void HandleBehaviorSimplified()
     {
         EnemyStats enemyStats = GetComponent<EnemyStats>();
         bool needsHealth = enemyStats.currentHealth <= enemyStats.maxHealth * 0.5f; // only search for healthpack once below 50%
@@ -254,87 +272,41 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             {
                 blackboard.Set("targetHealthPack", targetHealthPack);
                 blackboard.Set("seekingHealthPack", true);
-                return false;
+                return;
             }
         }
 
         blackboard.Set("seekingHealthPack", false);
 
         // Determine chasing behavior based on direct sight or recent intel
-        if (canSeePlayerDirectly)
+        if (blackboard.Get<bool>("chasingPlayer"))
         {
             blackboard.Set("lastKnownPlayerPosition", player.position);
             blackboard.Set("lastKnownPlayerTime", Time.time);
-            return true;
         }
-
-        if (blackboard.Has("lastKnownPlayerTime"))
-        {
-            float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
-            float timeSinceLastSeen = Time.time - lastSeenTime;
-            return timeSinceLastSeen < lastKnownPositionTimeout;
-        }
-
-        return false;
     }
 
-    bool SharingIntelBetweenEnemies(bool canSeePlayerDirectly, GameObject detectedEnemy)
-    {
-        // Always check if we can see another enemy and share intel
-        if (detectedEnemy != null)
-        {
-            Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
-            if (enemyBlackboard != null)
-            {
-                bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
-                bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
-
-                // Share player intel
-                SharePlayerIntel(enemyBlackboard, thisEnemyChasing, otherEnemyChasing);
-
-                // Share health pack intel
-                ShareHealthPackIntel(enemyBlackboard);
-            }
-        }
-
-        // Determine if we should be chasing
-        // If we can see the player directly, update last known position
-        if (canSeePlayerDirectly)
-        {
-            blackboard.Set("lastKnownPlayerPosition", player.position);
-            blackboard.Set("lastKnownPlayerTime", Time.time);
-            return true; // We are chasing if we can see the player directly
-        }
-        // Can't see player directly - check if we should chase based on recent intel
-        if (blackboard.Has("lastKnownPlayerTime"))
-        {
-            float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
-            float timeSinceLastSeen = Time.time - lastSeenTime;
-            return timeSinceLastSeen < lastKnownPositionTimeout;
-        }
-
-        return false; // No recent intel, don't chase
-    }
-
-    void SharePlayerIntel(Blackboard enemyBlackboard, bool thisEnemyChasing, bool otherEnemyChasing)
+    void SharePlayerIntel(Blackboard enemyBlackboard)
     {
         // Determine who has the most recent intel
         float thisLastSeen = blackboard.Has("lastKnownPlayerTime") ? blackboard.Get<float>("lastKnownPlayerTime") : -1f;
         float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
 
         // Share intel if either enemy is chasing and has more recent information
-        if (thisEnemyChasing && thisLastSeen > otherLastSeen)
+        if (thisLastSeen > otherLastSeen)
         {
             // This enemy shares intel to other enemy
             enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));
             enemyBlackboard.Set("lastKnownPlayerTime", thisLastSeen);
+            enemyBlackboard.Set("getLatestPlayerPosition", true);
             Debug.Log($"{name} shared player intel with {enemyBlackboard.gameObject.name}");
         }
-        else if (otherEnemyChasing && otherLastSeen > thisLastSeen)
+        else if (otherLastSeen > thisLastSeen)
         {
             // Other enemy shares intel to this enemy
             blackboard.Set("lastKnownPlayerPosition", enemyBlackboard.Get<Vector3>("lastKnownPlayerPosition"));
             blackboard.Set("lastKnownPlayerTime", otherLastSeen);
+            blackboard.Set("getLatestPlayerPosition", true);
             Debug.Log($"{enemyBlackboard.gameObject.name} shared player intel with {name}");
         }
     }
@@ -578,14 +550,14 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     }
 
     //Even more efficient: detect both enemies and health packs in one pass
-    (GameObject detectedEnemy, GameObject detectedHealthPack) GetDetectedObjects()
+    (List<GameObject> detectedEnemy, List<GameObject> detectedHealthPack) GetDetectedObjects()
     {
         bool isSuspicious = blackboard.Has("suspicious") && blackboard.Get<bool>("suspicious");
         bool isChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
         int currentSampleCount = isSuspicious || isChasing ? alertSampleCount : normalSampleCount;
 
         var frontSamples = PoissonDiscSampler.Generate(transform.up, viewAngle, viewDistance, currentSampleCount);
-        var (frontEnemy, frontHealthPack) = CheckSamplesForBothObjects(frontSamples, 1.0f);
+        var(frontEnemy, frontHealthPack) = CheckSamplesForBothObjects(frontSamples, 1.0f);
 
         if (frontEnemy != null || frontHealthPack != null)
         {
@@ -600,44 +572,38 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     }
 
     //Check for both enemies and health packs in a single loop
-    (GameObject enemy, GameObject healthPack) CheckSamplesForBothObjects(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
+    (List<GameObject> enemy, List<GameObject> healthPack) CheckSamplesForBothObjects(List<PoissonDiscSampler.Sample> samples, float maxConfidence)
     {
-        GameObject detectedEnemy = null;
-        GameObject detectedHealthPack = null;
+        List<GameObject> detectedEnemy = new List<GameObject>();
+        List<GameObject> detectedHealthPack = new List<GameObject>();
 
         foreach (var s in samples)
         {
             Vector3 worldSample = transform.position + s.direction * s.radius;
 
-            // Check for enemy
-            if (detectedEnemy == null)
+            // Check for enemies
+            RaycastHit2D[] enemyHits = Physics2D.RaycastAll(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
+            foreach (var enemyHit in enemyHits)
             {
-                RaycastHit2D[] enemyTarget = Physics2D.RaycastAll(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
-                foreach (var enemyHit in enemyTarget)
+                if (enemyHit.transform.gameObject == gameObject)
+                    continue;
+
+                if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy"))
                 {
-                    if (enemyHit.transform.gameObject == gameObject)
-                        continue;
-                    if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy") && enemyHit.collider.gameObject != gameObject)
-                    {
-                        detectedEnemy = enemyHit.transform.gameObject;
-                    }
+                    if (!detectedEnemy.Contains(enemyHit.transform.gameObject))
+                        detectedEnemy.Add(enemyHit.transform.gameObject);
                 }
             }
 
-            // Check for health pack
-            if (detectedHealthPack == null)
+            // Check for health packs
+            RaycastHit2D[] healthHits = Physics2D.RaycastAll(transform.position, s.direction, s.radius, obstacleMask | healthPackMask);
+            foreach (var health in healthHits)
             {
-                RaycastHit2D healthHit = Physics2D.Raycast(transform.position, s.direction, s.radius, obstacleMask | healthPackMask);
-                if (healthHit.collider != null && healthHit.transform.CompareTag("HealthPack"))
+                if (health.collider != null && health.transform.CompareTag("HealthPack"))
                 {
-                    detectedHealthPack = healthHit.transform.gameObject;
+                    if (!detectedHealthPack.Contains(health.transform.gameObject))
+                        detectedHealthPack.Add(health.transform.gameObject);
                 }
-            }
-
-            // Early exit if we found both
-            if (detectedEnemy != null && detectedHealthPack != null)
-            {
-                break;
             }
         }
 
@@ -645,7 +611,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     }
 
 
-    void ClearPathOrbs()
+void ClearPathOrbs()
     {
         foreach (var orb in pathOrbs)
             if (orb) Destroy(orb);
@@ -653,6 +619,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
     }
     bool UpdateChasingState()
     {
+        HandleBehaviorSimplified();   //Choose Health Pack or Chase Player
         switch (enemyData.currentAwareness)
         {
             case AwarenessMode.OmniScient:
@@ -660,8 +627,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             case AwarenessMode.ViewCone:
                 return blackboard.Get<bool>("viewConePlayerSeen");
             case AwarenessMode.PoissonDisc:
-                bool canSeePlayerDirectly = CheckPlayerInPoissonDisc();             //Direct Line of Sight of player
-                return HandlePoissonDiscBehaviorSimplified(canSeePlayerDirectly);   //Choose Health Pack or Chase Player
+                return CheckPlayerInPoissonDisc();
             case AwarenessMode.CircularRadius:
                 return blackboard.Get<bool>("circlePlayerSeen");
             default:
@@ -701,6 +667,11 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
                 path = null;
                 ClearPathOrbs();
             }
+            else if (path == null)
+            {
+                blackboard.Set("heardSound", false);
+                ClearPathOrbs();
+            }
         }
 
         return heardSound;
@@ -714,7 +685,10 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 
             if (repathTimer >= repathInterval)
             {
-                path = GridAStar.Instance.FindPath(transform.position, player.position);
+                if (blackboard.Get<bool>("getLatestPlayerPosition"))
+                    path = GridAStar.Instance.FindPath(transform.position, blackboard.Get<Vector3>("lastKnownPlayerPosition"));
+                else
+                    path = GridAStar.Instance.FindPath(transform.position, player.position);
                 blackboard.Set("path", path);
                 blackboard.Set("playerPosition", player.position);
                 blackboard.Set("pathIndex", 0);
@@ -738,6 +712,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             if (path != null && !CheckPlayerInPoissonDisc() && pathIdx >= path.Count)
             {
                 blackboard.Set("chasingPlayer", false);
+                blackboard.Set("getLatestPlayerPosition", false);
                 path = null;
                 ClearPathOrbs();
             }
@@ -801,4 +776,42 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             Gizmos.DrawLine(waypoints[i].position, waypoints[i + 1].position);
         }
     }
+
+    //bool SharingIntelBetweenEnemies(bool canSeePlayerDirectly, GameObject detectedEnemy)
+    //{
+    //    // Always check if we can see another enemy and share intel
+    //    if (detectedEnemy != null)
+    //    {
+    //        Blackboard enemyBlackboard = detectedEnemy.GetComponent<Blackboard>();
+    //        if (enemyBlackboard != null)
+    //        {
+    //            bool thisEnemyChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+    //            bool otherEnemyChasing = enemyBlackboard.Has("chasingPlayer") && enemyBlackboard.Get<bool>("chasingPlayer");
+
+    //            // Share player intel
+    //            SharePlayerIntel(enemyBlackboard, thisEnemyChasing, otherEnemyChasing);
+
+    //            // Share health pack intel
+    //            ShareHealthPackIntel(enemyBlackboard);
+    //        }
+    //    }
+
+    //    // Determine if we should be chasing
+    //    // If we can see the player directly, update last known position
+    //    if (canSeePlayerDirectly)
+    //    {
+    //        blackboard.Set("lastKnownPlayerPosition", player.position);
+    //        blackboard.Set("lastKnownPlayerTime", Time.time);
+    //        return true; // We are chasing if we can see the player directly
+    //    }
+    //    // Can't see player directly - check if we should chase based on recent intel
+    //    if (blackboard.Has("lastKnownPlayerTime"))
+    //    {
+    //        float lastSeenTime = blackboard.Get<float>("lastKnownPlayerTime");
+    //        float timeSinceLastSeen = Time.time - lastSeenTime;
+    //        return timeSinceLastSeen < lastKnownPositionTimeout;
+    //    }
+
+    //    return false; // No recent intel, don't chase
+    //}
 }

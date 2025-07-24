@@ -6,5 +6,6 @@ public enum SoundType
 {
     //To be added more later
     Footstep,
+    GunShot,
     Ambient,
 }

@@ -8,6 +8,11 @@ public class Bullet : MonoBehaviour
     [HideInInspector] public Vector3 dir = Vector3.zero;
     public float speed = 5f;
 
+    private void Start()
+    {
+        GetComponent<SoundEmitter>().baseVolume = 2f;
+    }
+
     void Update()
     {
         transform.position += dir * speed * Time.deltaTime;

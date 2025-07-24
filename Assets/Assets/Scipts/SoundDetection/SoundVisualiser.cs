@@ -11,7 +11,6 @@ public class SoundVisualizer : MonoBehaviour
 
     void Awake()
     {
-        WallConcreteness = 0.5f;
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -42,7 +41,6 @@ public class SoundVisualizer : MonoBehaviour
     {
         Vector3 fixedPosition = obj.transform.position;
         float elapsed = 0f;
-        SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
 
         Color fadedColor = baseColor;
         fadedColor.a = Mathf.Clamp01(baseColor.a * 0.5f); // Ripple opacity
@@ -59,12 +57,12 @@ public class SoundVisualizer : MonoBehaviour
             float rippleGrowth = Mathf.SmoothStep(0f, 1f, t);
             obj.transform.localScale = Vector3.one * (rippleGrowth * scaleFactor);
 
-            //float alpha = 1f - t; //Linear fade out
-            //sr.color = new Color(fadedColor.r, fadedColor.g, fadedColor.b, fadedColor.a * alpha);
+            float alpha = 1f - t; //Linear fade out
+            Color color = new Color(fadedColor.r, fadedColor.g, fadedColor.b, fadedColor.a * alpha);
 
             elapsed += Time.deltaTime;
 
-            DrawSoundWave(fixedPosition, 5, 360, LayerMask.GetMask("Wall"),ref obj);
+            DrawSoundWave(fixedPosition, obj.transform.localScale.x, 360, LayerMask.GetMask("Wall"), ref obj, color);
             yield return null;
         }
 
@@ -86,7 +84,7 @@ public class SoundVisualizer : MonoBehaviour
         }
     }
 
-    void DrawSoundWave(Vector2 origin, float maxRadius, int resolution, LayerMask obstacleMask, ref GameObject obj)
+    void DrawSoundWave(Vector2 origin, float maxRadius, int resolution, LayerMask obstacleMask, ref GameObject obj, Color color)
     {
         if (obj == null || !obj.TryGetComponent(out MeshFilter filter))
         {
@@ -94,8 +92,14 @@ public class SoundVisualizer : MonoBehaviour
             return;
         }
 
+        if (!obj.TryGetComponent(out MeshRenderer renderer))
+        {
+            Debug.LogWarning("MeshRenderer missing or obj not assigned.");
+            return;
+        }
+
         List<Vector3> points = new List<Vector3> { Vector3.zero };
-        List<Vector2> uvs = new List<Vector2>{new Vector2(0.5f, 0.5f)};
+        List<Vector2> uvs = new List<Vector2> { new Vector2(0.5f, 0.5f) };
 
         for (int i = 0; i <= resolution; i++)
         {
@@ -136,6 +140,7 @@ public class SoundVisualizer : MonoBehaviour
 
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
+        renderer.material.color = color;
         filter.mesh = mesh;
     }
 
