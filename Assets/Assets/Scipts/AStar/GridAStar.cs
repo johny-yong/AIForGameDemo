@@ -48,7 +48,7 @@ public class GridAStar : MonoBehaviour
                 if (!neighbor.walkable || closedSet.Contains(neighbor.cellPos))
                     continue;
 
-                float tentativeG = current.gCost + Vector3Int.Distance(current.cellPos, neighbor.cellPos);
+                float tentativeG = current.gCost + GetDistance(current.cellPos, neighbor.cellPos);
 
                 bool inOpenList = openList.Exists(n => n.cellPos == neighbor.cellPos);
                 if (!inOpenList || tentativeG < neighbor.gCost)
@@ -79,7 +79,16 @@ public class GridAStar : MonoBehaviour
         List<GridNode> neighbors = new List<GridNode>();
         Vector3Int[] directions = new Vector3Int[]
         {
-            Vector3Int.up, Vector3Int.down, Vector3Int.left, Vector3Int.right
+        Vector3Int.up,
+        Vector3Int.down,
+        Vector3Int.left,
+        Vector3Int.right,
+
+        //Adding diagonals check
+        new Vector3Int(1, 1, 0),
+        new Vector3Int(1, -1, 0),
+        new Vector3Int(-1, 1, 0),
+        new Vector3Int(-1, -1, 0)
         };
 
         foreach (var dir in directions)
@@ -90,6 +99,7 @@ public class GridAStar : MonoBehaviour
 
         return neighbors;
     }
+
 
     //Check back logic that was followed in A*
     List<Vector3> RetracePath(GridNode start, GridNode end)
@@ -106,5 +116,19 @@ public class GridAStar : MonoBehaviour
         path.Reverse();
         return path;
     }
+
+    //Calculation of Distance I put here
+    float GetDistance(Vector3Int a, Vector3Int b)
+    {
+        int dx = Mathf.Abs(a.x - b.x);
+        int dy = Mathf.Abs(a.y - b.y);
+
+        //Diagonal = 1.414 (sqrt2)
+        //1 means straight
+        if (dx > dy)
+            return 1.4142f * dy + 1f * (dx - dy);
+        return 1.4142f * dx + 1f * (dy - dx);
+    }
+
 
 }
