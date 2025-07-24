@@ -293,7 +293,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
         float otherLastSeen = enemyBlackboard.Has("lastKnownPlayerTime") ? enemyBlackboard.Get<float>("lastKnownPlayerTime") : -1f;
 
         // Share intel if either enemy is chasing and has more recent information
-        if (thisLastSeen > otherLastSeen)
+        if (thisLastSeen >= otherLastSeen)
         {
             // This enemy shares intel to other enemy
             enemyBlackboard.Set("lastKnownPlayerPosition", blackboard.Get<Vector3>("lastKnownPlayerPosition"));

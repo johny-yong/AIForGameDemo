@@ -120,15 +120,10 @@ public class GridAStar : MonoBehaviour
     //Calculation of Distance I put here
     float GetDistance(Vector3Int a, Vector3Int b)
     {
+        //Octile
         int dx = Mathf.Abs(a.x - b.x);
         int dy = Mathf.Abs(a.y - b.y);
 
-        //Diagonal = 1.414 (sqrt2)
-        //1 means straight
-        if (dx > dy)
-            return 1.4142f * dy + 1f * (dx - dy);
-        return 1.4142f * dx + 1f * (dy - dx);
+        return (dx + dy) + (1.41421356237f - 2) * Mathf.Min(dx, dy);
     }
-
-
 }

@@ -30,32 +30,28 @@ public class ViewConeRenderer : MonoBehaviour
     public float stdDev = 10.3f;
     public bool useGaussian = true;
 
-
     [Header("Head Turn Settings")]
-    public float headTurnAmplitude = 30f;     //±30 degrees
-    public float headTurnSpeed = 0.5f;        
-    public float headTurnGaussianRange = 10f; //Max randomness
-    public float headTurnJitterInterval = 2f; //Refresh interval (seconds)
-
-    private float headTurnGaussianOffset = 0f;
-    private float lastHeadTurnJitterTime = -999f;
+    public float headTurnAmplitude = 30f;
+    public float headTurnSpeed = 0.5f;
+    public float headTurnGaussianRange = 10f;
+    public float headTurnJitterInterval = 2f;
 
     public bool lockHeadWhenAlerted = true;
     private bool headTurnLocked = false;
     private float lockedHeadAngle = 0f;
-
-    //For building the texture
-    private Vector3[] vertices;
-    private Vector2[] uv;
-    private int[] triangles;
+    private float headTurnGaussianOffset = 0f;
+    private float lastHeadTurnJitterTime = -999f;
 
     [Header("Raycast Line Settings")]
     public bool showRayLines = true;
     public Material rayLineMaterial;
     public float rayLineWidth = 0.02f;
 
-
     private List<LineRenderer> rayLines = new List<LineRenderer>();
+
+    // For unlock delay
+    private float unlockTimer = 0f;
+    public float unlockDelay = 2f;
 
     void Awake()
     {
@@ -67,6 +63,7 @@ public class ViewConeRenderer : MonoBehaviour
         meshRenderer.material = dynamicMaterial;
         currentColor = hiddenColor;
         dynamicMaterial.color = currentColor;
+
         viewDistance = gameObject.GetComponentInParent<WaypointEnemyAI>().viewDistance;
         viewAngle = gameObject.GetComponentInParent<WaypointEnemyAI>().viewAngle;
 
@@ -85,23 +82,47 @@ public class ViewConeRenderer : MonoBehaviour
             DisableAllRayLines();
         }
 
+        if (blackboard != null && lockHeadWhenAlerted)
+        {
+            bool isChasing = blackboard.Has("chasingPlayer") && blackboard.Get<bool>("chasingPlayer");
+
+            if (!isChasing && headTurnLocked)
+            {
+                unlockTimer += Time.deltaTime;
+                if (unlockTimer >= unlockDelay)
+                {
+                    headTurnLocked = false;
+                    unlockTimer = 0f;
+                }
+            }
+            else
+            {
+                unlockTimer = 0f;
+            }
+        }
+
         UpdateHeadTurnJitter();
         GenerateCone();
         UpdateFade();
     }
+
     void GenerateCone()
     {
         float halfAngle = viewAngle * 0.5f;
+
+        // Compute clean offset and cached it for locking
+        float currentHeadTurnOffset = Mathf.Sin(Time.time * headTurnSpeed * 2f * Mathf.PI) * headTurnAmplitude + headTurnGaussianOffset;
         float headTurnOffset = (lockHeadWhenAlerted && headTurnLocked)
             ? lockedHeadAngle
-            : Mathf.Sin(Time.time * headTurnSpeed * 2f * Mathf.PI) * headTurnAmplitude + headTurnGaussianOffset;
+            : currentHeadTurnOffset;
 
-        List<(float angle, Vector3 endPoint, Vector2 uv)> sortedRays = new List<(float, Vector3, Vector2)>();
+        List<(float angle, Vector3 endPoint, Vector2 uv)> sortedRays = new();
         playerInSight = false;
         if (blackboard != null)
         {
             blackboard.Set("viewConePlayerSeen", false);
         }
+
         Vector3 worldPos = transform.position;
 
         for (int i = 0; i < rayCount; i++)
@@ -124,38 +145,24 @@ public class ViewConeRenderer : MonoBehaviour
 
                 if (!playerInSight && target != null)
                 {
-                    bool hitPlayer = (hit.collider.gameObject == target.gameObject);
-
-                    if (!hitPlayer)
-                    {
-                        hitPlayer = (hit.collider.transform == target) ||
-                                   (hit.collider.transform.IsChildOf(target));
-                    }
+                    bool hitPlayer = hit.collider.gameObject == target.gameObject ||
+                                     hit.collider.transform == target ||
+                                     hit.collider.transform.IsChildOf(target);
 
                     if (hitPlayer)
                     {
                         playerInSight = true;
                         if (blackboard != null)
-                        {
                             blackboard.Set("viewConePlayerSeen", true);
-                        }
-                        if (lockHeadWhenAlerted)
-                        {
-                            headTurnLocked = true;
-                            lockedHeadAngle = angle - headTurnOffset;
-                        }
-
-                        Debug.Log($"Player detected! Distance: {hit.distance}");
                     }
                 }
 
                 if (showRayLines)
                 {
                     EnsureRayLineCount(rayCount);
-                    LineRenderer lr = rayLines[i];
-                    lr.enabled = true;
-                    lr.SetPosition(0, worldPos);
-                    lr.SetPosition(1, hit.point);
+                    rayLines[i].enabled = true;
+                    rayLines[i].SetPosition(0, worldPos);
+                    rayLines[i].SetPosition(1, hit.point);
                 }
             }
             else
@@ -164,23 +171,27 @@ public class ViewConeRenderer : MonoBehaviour
                 if (showRayLines)
                 {
                     EnsureRayLineCount(rayCount);
-                    LineRenderer lr = rayLines[i];
-                    lr.enabled = true;
-                    lr.SetPosition(0, worldPos);
-                    lr.SetPosition(1, hit.collider ? hit.point : (worldPos + dir * viewDistance));
+                    rayLines[i].enabled = true;
+                    rayLines[i].SetPosition(0, worldPos);
+                    rayLines[i].SetPosition(1, worldPos + dir * viewDistance);
                 }
-
             }
 
             float uvAngle = (angle - headTurnOffset + halfAngle) / viewAngle;
             sortedRays.Add((angle, endPoint, new Vector2(uvAngle, 1f)));
         }
 
-        //Sort rays by angle
+        // Lock head only once when player detected
+        if (playerInSight && lockHeadWhenAlerted && !headTurnLocked)
+        {
+            headTurnLocked = true;
+            lockedHeadAngle = currentHeadTurnOffset;
+        }
+
         sortedRays.Sort((a, b) => a.angle.CompareTo(b.angle));
 
-        List<Vector3> vertices = new List<Vector3> { Vector3.zero };
-        List<Vector2> uvs = new List<Vector2> { new Vector2(0.5f, 0f) };
+        List<Vector3> vertices = new() { Vector3.zero };
+        List<Vector2> uvs = new() { new Vector2(0.5f, 0f) };
 
         foreach (var ray in sortedRays)
         {
@@ -209,54 +220,12 @@ public class ViewConeRenderer : MonoBehaviour
     void UpdateFade()
     {
         Color targetColor = hiddenColor;
-
         if (isVisible)
             targetColor = playerInSight ? alertColor : visibleColor;
 
         currentColor = Color.Lerp(currentColor, targetColor, Time.deltaTime * fadeSpeed);
         dynamicMaterial.color = currentColor;
     }
-
-    float GaussianRandom(float mean, float stdDev)
-    {
-        float u1 = 1.0f - Random.value;
-        float u2 = 1.0f - Random.value;
-        float randStdNormal = Mathf.Sqrt(-2.0f * Mathf.Log(u1)) * Mathf.Sin(2.0f * Mathf.PI * u2);
-        return mean + stdDev * randStdNormal;
-    }
-    void EnsureRayLineCount(int count)
-    {
-        while (rayLines.Count < count)
-        {
-            GameObject lineObj = new GameObject("RayLine");
-            lineObj.transform.parent = transform;
-
-            LineRenderer lr = lineObj.AddComponent<LineRenderer>();
-            lr.material = rayLineMaterial;
-            lr.startWidth = rayLineWidth;
-            lr.endWidth = rayLineWidth;
-            lr.positionCount = 2;
-            lr.useWorldSpace = true;
-            lr.sortingOrder = 99;
-
-            rayLines.Add(lr);
-        }
-
-        //Disable extra lines
-        for (int i = 0; i < rayLines.Count; i++)
-        {
-            rayLines[i].enabled = i < count;
-        }
-    }
-
-    float FastGaussian()
-    {
-        float u1 = Random.value;
-        float u2 = Random.value;
-        float randStdNormal = Mathf.Sqrt(-2f * Mathf.Log(u1)) * Mathf.Cos(2f * Mathf.PI * u2);
-        return randStdNormal; // mean 0, stddev 1
-    }
-
 
     void UpdateHeadTurnJitter()
     {
@@ -277,4 +246,43 @@ public class ViewConeRenderer : MonoBehaviour
         }
     }
 
+    void EnsureRayLineCount(int count)
+    {
+        while (rayLines.Count < count)
+        {
+            GameObject lineObj = new GameObject("RayLine");
+            lineObj.transform.parent = transform;
+
+            LineRenderer lr = lineObj.AddComponent<LineRenderer>();
+            lr.material = rayLineMaterial;
+            lr.startWidth = rayLineWidth;
+            lr.endWidth = rayLineWidth;
+            lr.positionCount = 2;
+            lr.useWorldSpace = true;
+            lr.sortingOrder = 99;
+
+            rayLines.Add(lr);
+        }
+
+        for (int i = 0; i < rayLines.Count; i++)
+        {
+            rayLines[i].enabled = i < count;
+        }
+    }
+
+    float GaussianRandom(float mean, float stdDev)
+    {
+        float u1 = 1.0f - Random.value;
+        float u2 = 1.0f - Random.value;
+        float randStdNormal = Mathf.Sqrt(-2.0f * Mathf.Log(u1)) * Mathf.Sin(2.0f * Mathf.PI * u2);
+        return mean + stdDev * randStdNormal;
+    }
+
+    float FastGaussian()
+    {
+        float u1 = Random.value;
+        float u2 = Random.value;
+        return Mathf.Sqrt(-2f * Mathf.Log(u1)) * Mathf.Cos(2f * Mathf.PI * u2);
+    }
 }
+    
