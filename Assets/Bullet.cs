@@ -6,7 +6,9 @@ using UnityEngine.SceneManagement;
 public class Bullet : MonoBehaviour
 {
     [HideInInspector] public Vector3 dir = Vector3.zero;
+    [HideInInspector] public bool canHearSound = false;
     public float speed = 5f;
+    
 
     private void Start()
     {
@@ -16,7 +18,10 @@ public class Bullet : MonoBehaviour
     void Update()
     {
         transform.position += dir * speed * Time.deltaTime;
-        GetComponent<SoundEmitter>().EmitSound();
+        if (canHearSound)
+        {
+            GetComponent<SoundEmitter>().EmitSound();
+        }
     }
 
     private void OnTriggerEnter2D(Collider2D collision)

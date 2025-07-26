@@ -582,7 +582,7 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
             Vector3 worldSample = transform.position + s.direction * s.radius;
 
             // Check for enemies
-            RaycastHit2D[] enemyHits = Physics2D.RaycastAll(transform.position, s.direction, s.radius, obstacleMask | enemyMask);
+            RaycastHit2D[] enemyHits = Physics2D.RaycastAll(transform.position, s.direction, s.radius, enemyMask);
             foreach (var enemyHit in enemyHits)
             {
                 if (enemyHit.transform.gameObject == gameObject)
@@ -590,6 +590,9 @@ public class WaypointEnemyAI : MonoBehaviour, IHearingReceiver
 
                 if (enemyHit.collider != null && enemyHit.transform.CompareTag("Enemy"))
                 {
+                    RaycastHit2D wallRayCheck = Physics2D.Raycast(transform.position, s.direction, enemyHit.distance);
+                    if (wallRayCheck.collider.tag == "Wall")
+                        continue;
                     if (!detectedEnemy.Contains(enemyHit.transform.gameObject))
                         detectedEnemy.Add(enemyHit.transform.gameObject);
                 }

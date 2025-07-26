@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 //Basic controls
 [RequireComponent(typeof(Rigidbody2D))]
@@ -38,7 +39,13 @@ public class PlayerController : MonoBehaviour
 
             GameObject obj = Instantiate(bullet, transform.position, Quaternion.identity);
             obj.GetComponent<Bullet>().dir = direction;
+            obj.GetComponent<Bullet>().canHearSound = enemyData.canHearSound;
             obj.tag = "Player";
+        }
+
+        if (Input.GetKeyDown(KeyCode.F10))
+        {
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
 
         if (movement.sqrMagnitude > 0.001f)

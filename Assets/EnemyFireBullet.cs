@@ -27,6 +27,7 @@ public class EnemyFireBullet : MonoBehaviour
                 GameObject obj = Instantiate(bullet, transform.position, Quaternion.identity);
                 obj.GetComponent<Bullet>().dir = transform.up;
                 obj.GetComponent<Bullet>().speed = bulletSpeed;
+                obj.GetComponent<Bullet>().canHearSound = GetComponent<WaypointEnemyAI>().enemyData.canHearSound;
                 obj.tag = "Enemy";
                 cooldownTimer = cooldown;
             }

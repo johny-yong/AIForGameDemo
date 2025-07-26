@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class SoundVisualizer : MonoBehaviour
@@ -9,6 +11,11 @@ public class SoundVisualizer : MonoBehaviour
     public float baseDuration = 1f;
     public float WallConcreteness = 0.5f; //soundproof to hollow (0 - 1)
 
+    public TextMeshProUGUI wallConcretenessValueText;
+    private void Start()
+    {
+        wallConcretenessValueText.text = "Wall Concreteness: " + WallConcreteness.ToString();
+    }
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -144,4 +151,9 @@ public class SoundVisualizer : MonoBehaviour
         filter.mesh = mesh;
     }
 
+    public void OnSliderValueChanged(float value)
+    {
+        WallConcreteness = value;
+        wallConcretenessValueText.text = "Wall Concreteness: " + WallConcreteness.ToString();
+    }
 }
